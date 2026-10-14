@@ -14,6 +14,7 @@ const require = createRequire(import.meta.url);
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const ORACLE = join(root, 'plugin', 'hooks', 'devanity-oracle.js');
 const INJECT = join(root, 'plugin', 'hooks', 'devanity-inject.js');
+const MODE = join(root, 'plugin', 'hooks', 'devanity-mode.js');
 const oracle = require(ORACLE);
 
 let temp;
@@ -75,6 +76,34 @@ function parseBlock(stdout) {
   assert.equal(typeof out.reason, 'string');
   return out.reason;
 }
+
+describe('oracle: an impossible obligation is an honest NOT_VERIFIED that asks (A1.2)', () => {
+  const impossible = (conflict) => 'Blocked.\n\n```\n' + proofBlock({ check: 'node --test mod.test.js', failed_before: 'n/a', passed_after: 'n/a', status: `NOT_VERIFIED: impossible: ${conflict}`, pending: 0 }) + '\n```\n';
+  const prompt = (cwd, text) => JSON.stringify({ hook_event_name: 'UserPromptSubmit', session_id: 'h1', cwd, prompt: text });
+
+  test('never blocks, never false_ready; queues one scope decision carrying the conflict, once; a plain NOT_VERIFIED queues nothing', async () => {
+    const d = seedBuggyRepo('node --test mod.test.js');
+    const env = baseEnv();
+    const msg = impossible('the spec says refunds round up, the declared test pins round-half-even');
+    let r = await runHook(ORACLE, { input: stopPayload(d, msg), env, cwd: d });
+    assert.equal(r.code, 0, r.stderr);
+    assert.equal(r.stdout, '', 'an honest NOT_VERIFIED is never blocked');
+    const p = readLedger(d, 'proofs')[0];
+    assert.equal(p.measured, null); assert.ok(p.status.startsWith('NOT_VERIFIED: impossible:'));
+    assert.deepEqual(readLedger(d, 'events').filter((e) => e.kind === 'false_ready'), []);
+    const pending = readLedger(d, 'decisions').filter((x) => x.status === 'pending');
+    assert.equal(pending.length, 1, JSON.stringify(pending));
+    assert.equal(pending[0].decide_kind, 'scope'); assert.equal(pending[0].by, 'agent');
+    assert.ok(pending[0].id.startsWith('I-') && pending[0].question.includes('round-half-even'), JSON.stringify(pending[0]));
+    r = await runHook(ORACLE, { input: stopPayload(d, msg), env, cwd: d });
+    assert.equal(readLedger(d, 'decisions').filter((x) => x.status === 'pending').length, 1, 'the same conflict is not asked twice');
+    const list = await runHook(MODE, { input: prompt(d, '/devanity pending'), env, cwd: d });
+    assert.ok(list.stdout.includes('round-half-even'), list.stdout);
+    const plain = 'Not done.\n\n```\n' + proofBlock({ check: 'x', failed_before: 'no', passed_after: 'no', status: 'NOT_VERIFIED: check fails after', pending: 0 }) + '\n```\n';
+    r = await runHook(ORACLE, { input: stopPayload(d, plain), env, cwd: d });
+    assert.equal(readLedger(d, 'decisions').filter((x) => x.status === 'pending').length, 1, 'a plain NOT_VERIFIED asks nothing');
+  });
+});
 
 describe('oracle: parsing', () => {
   test('finds the FIRST block, any spacing, inside or outside a fence; pending_decisions aliases pending', () => {
@@ -397,5 +426,106 @@ describe('inject: repository rules context (F2.5)', () => {
     assert.ok(section.length <= 1600, `section is ${section.length} chars`);
     assert.ok(section.includes('Autonomy envelope') && section.includes('Guards:'), 'the fixed lines are never the ones cut');
     assert.match(section, /… \d+ more path\(s\) in devanity\.rules\.json$/, 'whole entries only, the rest named');
+  });
+});
+
+describe('oracle: tests that existed at HEAD are frozen (A1.1)', () => {
+  // HEAD holds a correct module and its test; the working tree breaks the module and bends the
+  // old test to match. The overlay alone would call that VERIFIED: the bent test fails on HEAD
+  // and passes now. The oracle must refuse it: an old test that changed is a contract question.
+  const seedTamperedRepo = () => {
+    const d = fresh();
+    initRepo(d);
+    writeFileSync(join(d, 'mod.js'), 'module.exports = (a, b) => a + b;\n');
+    writeFileSync(join(d, 'mod.test.js'), TEST_FILE);
+    writeFileSync(join(d, 'devanity.rules.json'), JSON.stringify({ version: 1, paths: { 'mod.js': { tier: 'normal', check: 'node --test mod.test.js' } } }));
+    commitAll(d);
+    writeFileSync(join(d, 'mod.js'), 'module.exports = (a, b) => a - b;\n');
+    writeFileSync(join(d, 'mod.test.js'), TEST_FILE.replace('3)', '-1)'));
+    return d;
+  };
+  const prompt = (cwd, text) => JSON.stringify({ hook_event_name: 'UserPromptSubmit', session_id: 'h1', cwd, prompt: text });
+
+  test('an old test edited to pass -> NOT_VERIFIED: old test changed (<path>), blocked once with the path named, false_ready and a scope decision queued; the check is not run', async () => {
+    const d = seedTamperedRepo();
+    const env = baseEnv();
+    const message = claimVerified('node --test mod.test.js');
+    let r = await runHook(ORACLE, { input: stopPayload(d, message), env, cwd: d });
+    assert.equal(r.code, 0, r.stderr);
+    const reason = parseBlock(r.stdout);
+    assert.ok(reason.includes(`status: NOT_VERIFIED: ${oracle.REASONS.oldTestChanged} (mod.test.js)`), reason);
+    assert.ok(reason.includes('failed_before: n/a') && reason.includes('passed_after: n/a'), 'nothing was measured: ' + reason);
+    assert.ok(/\[DECIDE\]/.test(reason) && reason.includes('--path mod.test.js'), 'the agent is told how a contract change is answered: ' + reason);
+    const p = readLedger(d, 'proofs')[0];
+    assert.equal(p.reason, oracle.REASONS.oldTestChanged); assert.deepEqual(p.paths, ['mod.test.js']);
+    assert.equal(p.failed_before, null); assert.equal(p.passed_after, null);
+    const fr = readLedger(d, 'events').filter((e) => e.kind === 'false_ready');
+    assert.equal(fr.length, 1); assert.equal(fr[0].reason, oracle.REASONS.oldTestChanged);
+    const pending = readLedger(d, 'decisions').filter((x) => x.status === 'pending');
+    assert.equal(pending.length, 1, JSON.stringify(pending));
+    assert.equal(pending[0].path, 'mod.test.js'); assert.equal(pending[0].decide_kind, 'scope'); assert.equal(pending[0].by, 'agent');
+    assert.equal(git(d, 'worktree', 'list', '--porcelain').stdout.trim().split('\n\n').length, 1, 'no worktree was made');
+    r = await runHook(ORACLE, { input: stopPayload(d, message), env, cwd: d });
+    assert.equal(readLedger(d, 'decisions').filter((x) => x.status === 'pending').length, 1, 'the same question is not queued twice');
+    r = await runHook(ORACLE, { input: stopPayload(d, message, { stop_hook_active: true }), env, cwd: d });
+    assert.equal(r.stdout, '', 'never blocks twice');
+  });
+
+  test('a human decision on the test path lifts the freeze: the overlay measures as before', async () => {
+    const d = seedTamperedRepo();
+    const env = baseEnv();
+    const message = claimVerified('node --test mod.test.js');
+    parseBlock((await runHook(ORACLE, { input: stopPayload(d, message), env, cwd: d })).stdout);
+    const id = readLedger(d, 'decisions').find((x) => x.status === 'pending').id;
+    const ans = await runHook(MODE, { input: prompt(d, `/devanity decide ${id} contract-change --path mod.test.js`), env, cwd: d });
+    assert.ok(ans.stdout.includes('by human'), ans.stdout);
+    const r = await runHook(ORACLE, { input: stopPayload(d, message), env, cwd: d });
+    assert.equal(r.code, 0, r.stderr);
+    assert.equal(r.stdout, '', 'with the change authorized the bent test is the new contract, and the claim measures VERIFIED');
+    const last = readLedger(d, 'proofs').at(-1);
+    assert.equal(last.status, 'VERIFIED'); assert.equal(last.failed_before, true);
+  });
+
+  test('a staged rename of the old test (git mv, then bend the copy) is a changed old test too', async () => {
+    const d = seedTamperedRepo();
+    writeFileSync(join(d, 'mod.test.js'), TEST_FILE);   // back as at HEAD, then renamed and bent under the new name
+    git(d, 'mv', 'mod.test.js', 'mod2.test.js');
+    writeFileSync(join(d, 'mod2.test.js'), TEST_FILE.replace('3)', '-1)'));
+    git(d, 'add', 'mod2.test.js');
+    const r = await runHook(ORACLE, { input: stopPayload(d, claimVerified('node --test mod2.test.js')), env: baseEnv(), cwd: d });
+    assert.equal(r.code, 0, r.stderr);
+    assert.ok(parseBlock(r.stdout).includes(`${oracle.REASONS.oldTestChanged} (mod.test.js)`), 'the HEAD test left the tree under a rename: ' + r.stdout);
+    assert.equal(readLedger(d, 'proofs')[0].status.startsWith('VERIFIED'), false);
+  });
+
+  test('two frozen tests whose names collide get two decisions with distinct ids, and pending counts both', async () => {
+    const d = fresh();
+    initRepo(d);
+    mkdirSync(join(d, 'tests'), { recursive: true });
+    writeFileSync(join(d, 'mod.js'), 'module.exports = (a, b) => a + b;\n');
+    writeFileSync(join(d, 'tests', 'mod.test.js'), TEST_FILE.replace("'./mod.js'", "'../mod.js'"));
+    writeFileSync(join(d, 'tests', 'mod.test.cjs'), TEST_FILE.replace("'./mod.js'", "'../mod.js'"));
+    writeFileSync(join(d, 'devanity.rules.json'), JSON.stringify({ version: 1, paths: { 'mod.js': { tier: 'normal', check: 'node --test tests/' } } }));
+    commitAll(d);
+    writeFileSync(join(d, 'mod.js'), 'module.exports = (a, b) => a - b;\n');
+    for (const f of ['mod.test.js', 'mod.test.cjs']) writeFileSync(join(d, 'tests', f), TEST_FILE.replace("'./mod.js'", "'../mod.js'").replace('3)', '-1)'));
+    const r = await runHook(ORACLE, { input: stopPayload(d, claimVerified('node --test tests/')), env: baseEnv(), cwd: d });
+    const reason = parseBlock(r.stdout);
+    assert.ok(reason.includes('pending: 2'), reason);
+    const pending = readLedger(d, 'decisions').filter((x) => x.status === 'pending');
+    assert.deepEqual(pending.map((x) => x.path).sort(), ['tests/mod.test.cjs', 'tests/mod.test.js']);
+    assert.equal(new Set(pending.map((x) => x.id)).size, 2, JSON.stringify(pending));
+  });
+
+  test('a deleted old test is a changed one; a new test file is not', async () => {
+    const d = seedTamperedRepo();
+    writeFileSync(join(d, 'mod.test.js'), TEST_FILE);   // the old test back as at HEAD
+    writeFileSync(join(d, 'mod.js'), 'module.exports = (a, b) => b + a;\n');   // still changed, so mod.js's check applies
+    writeFileSync(join(d, 'extra.test.js'), "const t=require('node:test');t('x',()=>{});\n");
+    let r = await runHook(ORACLE, { input: stopPayload(d, claimVerified('node --test mod.test.js')), env: baseEnv(), cwd: d });
+    assert.ok(!r.stdout.includes(oracle.REASONS.oldTestChanged), 'an added test never freezes: ' + r.stdout);
+    rmSync(join(d, 'mod.test.js'));
+    r = await runHook(ORACLE, { input: stopPayload(d, claimVerified('node --test mod.test.js')), env: baseEnv(), cwd: d });
+    assert.ok(parseBlock(r.stdout).includes(`${oracle.REASONS.oldTestChanged} (mod.test.js)`), r.stdout);
   });
 });

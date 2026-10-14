@@ -167,6 +167,8 @@ function agentRole(agentType) {
   const bare = String(agentType || '').trim().toLowerCase().split(':').pop();
   if (bare === 'verifier') return 'verifier';
   if (bare === 'worker') return 'worker';
+  if (bare === 'implementer') return 'implementer';
+  if (bare === 'oracle-author') return 'oracle-author';
   return 'other';
 }
 

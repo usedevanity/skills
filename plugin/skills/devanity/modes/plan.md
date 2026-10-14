@@ -64,7 +64,7 @@ Stop the slice and return to INSPECT, or to a decision, when:
 - an assumption broke, or a human-owned decision appeared;
 - the class rose to `A2`, or placement became unclear;
 - the risk rose, or the next action exceeds authority;
-- the proof became circular, or a check left unexplained side effects.
+- the proof became circular, an obligation contradicts the declared check (`status: NOT_VERIFIED: impossible: <conflict>`, which queues a `scope` decision), or a check left unexplained side effects.
 
 A weak repository (few tests, fuzzy boundaries) is context, not a block. Say the assurance is reduced, add the smallest regression check the slice needs, narrow the scope, and name the residual risk.
 
