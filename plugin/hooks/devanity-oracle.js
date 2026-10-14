@@ -289,19 +289,27 @@ function runCheck(command, cwd, deadline) {
 // Tests that existed at HEAD are frozen (A1.1): the overlay lets a NEW test fail on HEAD, but an
 // OLD test edited (or deleted) to match the change is a contract question, not a proof. The
 // changed test paths present in HEAD, minus those a human decision already covers.
-function changedOldTests(root, rules, paths) {
-  return paths.filter((rel) => rulesMod.isTestPath(rules, rel)
+function changedOldTests(root, rules) {
+  // Without rename detection a `git mv` shows its source as deleted; `changedPaths` would list only
+  // the destination, and the HEAD test that left the tree would never be seen.
+  const d = git(root, ['diff', '--name-only', '-z', '--no-renames', 'HEAD']);
+  if (d.status !== 0) return [];
+  return [...new Set(d.stdout.split('\0').filter(Boolean))].filter((rel) => rulesMod.isTestPath(rules, rel)
     && git(root, ['cat-file', '-e', `HEAD:${rel}`]).status === 0
     && !ledger.humanDecisionFor(root, rel, rulesMod.globToRegExp));
 }
 
-// One pending decision per frozen test, with the ledger id a human answers; never queued twice.
+// One pending decision per frozen test, with the ledger id a human answers; never queued twice for
+// a path, and never under an id another path already holds (the latest record per id wins).
 function queueTestDecisions(root, frozen, sid) {
-  const ids = new Set(ledger.decisions(root).map((d) => d.id));
+  const all = ledger.decisions(root);
   for (const rel of frozen) {
-    const id = `T-${rel.replace(/\.[^.]+$/, '').replace(/[^A-Za-z0-9_-]+/g, '-')}`;
-    if (ids.has(id)) continue;
-    ledger.append(root, 'decisions', { id, path: rel, kind: 'human', status: 'pending', by: 'agent', decide_kind: 'scope', question: `A test that existed at HEAD changed: ${rel}. A contract change, or a regression to restore?` }, sid);
+    if (all.some((d) => d.path === rel)) continue;   // queued, answered or rejected before: not asked again
+    const base = `T-${rel.replace(/[^A-Za-z0-9_-]+/g, '-')}`;
+    let id = base;
+    for (let k = 2; all.some((d) => d.id === id); k++) id = `${base}-${k}`;
+    const rec = { id, path: rel, kind: 'human', status: 'pending', by: 'agent', decide_kind: 'scope', question: `A test that existed at HEAD changed: ${rel}. A contract change, or a regression to restore?` };
+    if (ledger.append(root, 'decisions', rec, sid)) all.push(rec);
   }
 }
 
@@ -416,7 +424,7 @@ function decide(payload, env = process.env) {
   }
 
   const baseline = info.head ? `HEAD@${info.head.slice(0, 12)} + tests overlay` : 'empty tree + tests overlay';
-  const frozen = info.head ? changedOldTests(root, loaded.rules, paths) : [];
+  const frozen = info.head ? changedOldTests(root, loaded.rules) : [];
   if (frozen.length) {
     const status = `NOT_VERIFIED: ${REASONS.oldTestChanged} (${frozen.join(', ')})`;
     ledger.append(root, 'proofs', { ...base, check, failed_before: null, passed_after: null, status, measured: true, reason: REASONS.oldTestChanged, paths: frozen }, sid);

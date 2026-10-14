@@ -458,6 +458,37 @@ describe('oracle: tests that existed at HEAD are frozen (A1.1)', () => {
     assert.equal(last.status, 'VERIFIED'); assert.equal(last.failed_before, true);
   });
 
+  test('a staged rename of the old test (git mv, then bend the copy) is a changed old test too', async () => {
+    const d = seedTamperedRepo();
+    writeFileSync(join(d, 'mod.test.js'), TEST_FILE);   // back as at HEAD, then renamed and bent under the new name
+    git(d, 'mv', 'mod.test.js', 'mod2.test.js');
+    writeFileSync(join(d, 'mod2.test.js'), TEST_FILE.replace('3)', '-1)'));
+    git(d, 'add', 'mod2.test.js');
+    const r = await runHook(ORACLE, { input: stopPayload(d, claimVerified('node --test mod2.test.js')), env: baseEnv(), cwd: d });
+    assert.equal(r.code, 0, r.stderr);
+    assert.ok(parseBlock(r.stdout).includes(`${oracle.REASONS.oldTestChanged} (mod.test.js)`), 'the HEAD test left the tree under a rename: ' + r.stdout);
+    assert.equal(readLedger(d, 'proofs')[0].status.startsWith('VERIFIED'), false);
+  });
+
+  test('two frozen tests whose names collide get two decisions with distinct ids, and pending counts both', async () => {
+    const d = fresh();
+    initRepo(d);
+    mkdirSync(join(d, 'tests'), { recursive: true });
+    writeFileSync(join(d, 'mod.js'), 'module.exports = (a, b) => a + b;\n');
+    writeFileSync(join(d, 'tests', 'mod.test.js'), TEST_FILE.replace("'./mod.js'", "'../mod.js'"));
+    writeFileSync(join(d, 'tests', 'mod.test.cjs'), TEST_FILE.replace("'./mod.js'", "'../mod.js'"));
+    writeFileSync(join(d, 'devanity.rules.json'), JSON.stringify({ version: 1, paths: { 'mod.js': { tier: 'normal', check: 'node --test tests/' } } }));
+    commitAll(d);
+    writeFileSync(join(d, 'mod.js'), 'module.exports = (a, b) => a - b;\n');
+    for (const f of ['mod.test.js', 'mod.test.cjs']) writeFileSync(join(d, 'tests', f), TEST_FILE.replace("'./mod.js'", "'../mod.js'").replace('3)', '-1)'));
+    const r = await runHook(ORACLE, { input: stopPayload(d, claimVerified('node --test tests/')), env: baseEnv(), cwd: d });
+    const reason = parseBlock(r.stdout);
+    assert.ok(reason.includes('pending: 2'), reason);
+    const pending = readLedger(d, 'decisions').filter((x) => x.status === 'pending');
+    assert.deepEqual(pending.map((x) => x.path).sort(), ['tests/mod.test.cjs', 'tests/mod.test.js']);
+    assert.equal(new Set(pending.map((x) => x.id)).size, 2, JSON.stringify(pending));
+  });
+
   test('a deleted old test is a changed one; a new test file is not', async () => {
     const d = seedTamperedRepo();
     writeFileSync(join(d, 'mod.test.js'), TEST_FILE);   // the old test back as at HEAD
