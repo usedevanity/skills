@@ -327,7 +327,7 @@ function recommendation(dec) {
   return out;
 }
 function probabilityOf(text) {
-  const m = /\bp\s*=\s*(0?\.\d+|1(?:\.0+)?|0)\b/.exec(String(text || ''));
+  const m = /\bp\s*=\s*(0?\.\d+|1(?:\.0+)?|0)(?![\d.])/.exec(String(text || ''));   // the whole number: `p=1.5` is not `p=1`
   if (!m) return null;
   const p = Number(m[1]);
   return p > 0 && p <= 1 ? p : null;

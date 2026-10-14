@@ -96,7 +96,8 @@ export function runMutants(root, base, check, { scope = [], max = MAX_MUTANTS } 
     const st = gitRun(root, ['status', '--porcelain=v1', '-z', '--untracked-files=all']);
     for (const entry of st.stdout.split('\0')) {
       const rel = entry.length > 3 ? entry.slice(3) : '';
-      if (!rel || !existsSync(join(root, rel))) continue;
+      if (!rel) continue;
+      if (!existsSync(join(root, rel))) { rmSync(join(tmp, rel), { force: true }); continue; }   // a deletion is part of the tree too
       mkdirSync(dirname(join(tmp, rel)), { recursive: true });
       copyFileSync(join(root, rel), join(tmp, rel));
     }

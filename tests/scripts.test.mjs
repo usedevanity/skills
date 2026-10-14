@@ -267,4 +267,10 @@ test('mutants: every changed non-test line gets its operator mutants, each run a
   assert.match(r.out, /^mutants HEAD~1\.\.HEAD: \d+ run · \d+ killed · \d+ survived/m, r.out);
   assert.match(r.out, /mod\.js:2 .*</, r.out);
   assert.equal(run(MUTANTS, ['--check', 'x'], { cwd: d }).code, 1, '--base is required');
+  // an uncommitted deletion is part of the working tree the copy must mirror: a check that passes only without the file passes there too
+  commit(d, { 'helper.js': 'module.exports = 1;\n' }, 'helper');
+  rmSync(join(d, 'helper.js'));
+  r = run(MUTANTS, ['--base', 'HEAD~2', '--check', 'test ! -e helper.js && node --test mod.test.js', '--json'], { cwd: d, env });
+  assert.equal(r.code, 0, `a deleted file must be absent from the mutant tree: ${r.err}`);
+  assert.ok(JSON.parse(r.out).total >= 1);
 });

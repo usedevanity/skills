@@ -553,12 +553,12 @@ describe('a recommendation with a probability is scored by log-loss (A5)', () =>
   test('p=<0–1> on the recommended label gives each decided answer its loss; the mean rides on stats, overall and per kind; without p nothing is scored', async () => {
     const d = repo();
     const opts = 'prorate → fair · full refund in 14 days → simpler · no-op → none';
-    for (const [id, rec] of [['G-001', 'prorate (p=0.8); the fairest'], ['G-002', 'prorate p=0.8'], ['G-003', 'prorate; no number']]) {
+    for (const [id, rec] of [['G-001', 'prorate (p=0.8); the fairest'], ['G-002', 'prorate p=0.8'], ['G-003', 'prorate; no number'], ['G-004', 'prorate p=1.5']]) {
       await run(ORACLE, { input: stopPayload(d, decideBlock(id, `Refunds ${id}?`, { options: opts, recommendation: rec })), cwd: d });
     }
-    await run(MODE, { input: prompt(d, '/devanity decide G-001 prorate, G-002 full refund in 14 days, G-003 prorate --path billing/**'), cwd: d });
+    await run(MODE, { input: prompt(d, '/devanity decide G-001 prorate, G-002 full refund in 14 days, G-003 prorate, G-004 no-op --path billing/**'), cwd: d });
     const s = ledger.stats(d);
-    // G-001: chosen the recommended, -ln 0.8 = 0.22; G-002: chosen another of the three, its share is (1 - 0.8) / 2, -ln 0.1 = 2.30; G-003: no p, not scored
+    // G-001: chosen the recommended, -ln 0.8 = 0.22; G-002: chosen another of the three, its share is (1 - 0.8) / 2, -ln 0.1 = 2.30; G-003: no p, not scored; G-004: p outside (0, 1], not scored
     assert.deepEqual(s.recommendation.log_loss, { scored: 2, mean: 1.26 });
     assert.equal(s.recommendation.by_kind.rule.log_loss.scored, 2);
     assert.match(spawnSync(process.execPath, [LEDGER, 'stats'], { cwd: d, encoding: 'utf8' }).stdout, /^recommendation: .*log-loss 1\.26 over 2/m);
