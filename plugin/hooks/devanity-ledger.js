@@ -12,6 +12,7 @@
 const fs = require('fs');
 const path = require('path');
 const rulesMod = require('./devanity-rules');
+const rt = require('./devanity-runtime');
 const { spawnSync } = require('child_process');
 
 const KINDS = ['contracts', 'decisions', 'proofs', 'events'];
@@ -264,9 +265,8 @@ function cost(proofs) {
 // decisions). Measured here; the proposal stays the mode's, the acceptance the human's.
 const PRINCIPLE_MIN = 3;
 function principles(cwd, dec) {
-  const common = gitCommonDir(cwd);
-  const root = common && path.basename(common) === '.git' ? path.dirname(common) : cwd;
-  const loaded = rulesMod.loadRules(root);
+  // The map is the checkout's (a worktree has its own), never the common dir's parent.
+  const loaded = rulesMod.loadRules(rt.gitToplevel(cwd) || cwd);
   if (!loaded.present || loaded.errors.length) return { candidates: [] };
   const groups = new Map();
   for (const d of dec) {

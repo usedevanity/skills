@@ -228,7 +228,8 @@ test('surfaces: run through a symlinked path it still reports (an install path m
 test('entropy: duplication by 5-line window, new suppressions and new casts between two revisions, over the changed text files only (A3.2)', () => {
   const d = join(temp, `e${++n}`); mkdirSync(d); git(d, 'init', '-q', '-b', 'main');
   const block = ['const a = read(x);', 'if (!a) {', '  return fail(1);', '}', 'const b = parse(a);', 'return b.value;'].join('\n');
-  commit(d, { 'src/a.js': `${block}\nexport default 1;\n`, 'src/c.js': 'const c = 3;\n' }, 'base');
+  // a Latin-1 text file (not UTF-8, no NUL) and a path with a newline sort before the changed file: neither may shift the batch parse
+  commit(d, { 'README': Buffer.from([0x63, 0x61, 0x66, 0xe9, 0x0a]), 'a\nb.js': 'const q = 1;\n', 'src/a.js': `${block}\nexport default 1;\n`, 'src/c.js': 'const c = 3;\n' }, 'base');
   commit(d, { 'src/b.js': `function g() {\n${block}\n}\n// eslint-disable-next-line no-console\nconsole.log(x as any);\n`, 'bin.dat': Buffer.from([0, 1, 2, 0, 3]), 'src/c.js': 'const c = 3;\n' }, 'change');
   let r = run(ENTROPY, ['--base', 'HEAD~1', '--json'], { cwd: d });
   assert.equal(r.code, 0, r.err);

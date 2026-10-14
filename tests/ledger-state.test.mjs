@@ -547,6 +547,18 @@ describe('principle candidates (A2.4)', () => {
     const r = spawnSync(process.execPath, [LEDGER, 'stats'], { cwd: d, encoding: 'utf8' });
     assert.match(r.stdout, /^principles: 1 candidate · billing\/\*\* rule ×3 \(G-1, G-2, G-3\)$/m, r.stdout);
   });
+
+  test('inside a git worktree the map read is the worktree\'s, as every other hook reads it (the ledger stays the shared one)', () => {
+    const d = repo();
+    writeFileSync(join(d, 'devanity.rules.json'), JSON.stringify({ version: 1, paths: { 'billing/**': { tier: 'high-risk' } } }));
+    git(d, 'add', '.'); git(d, '-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', 'map');
+    const wt = fresh('wt'); rmSync(wt, { recursive: true, force: true });
+    git(d, 'worktree', 'add', '-q', wt);
+    writeFileSync(join(wt, 'devanity.rules.json'), JSON.stringify({ version: 1, paths: { 'src/api/**': { tier: 'normal' } } }));
+    for (const [id, p] of [['G-1', 'billing/a.py'], ['G-2', 'billing/b.py'], ['G-3', 'billing/c.py'], ['G-4', 'src/api/x.ts'], ['G-5', 'src/api/y.ts'], ['G-6', 'src/api/z.ts']]) ledger.append(wt, 'decisions', { id, status: 'decided', by: 'human', decide_kind: 'rule', path: p, chosen: 'a' });
+    assert.deepEqual(ledger.stats(wt).principles.candidates.map((c) => c.area), ['src/api/**']);
+    assert.deepEqual(ledger.stats(d).principles.candidates.map((c) => c.area), ['billing/**'], 'the main checkout still reads its own map');
+  });
 });
 
 describe('attention ledger (A0.1, A0.2)', () => {

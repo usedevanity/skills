@@ -7,6 +7,7 @@
 // the ratchet that fails on it is the CI job's (`delta.entropy: ratchet`, A3.3).
 //   node entropy.mjs --base <ref> [--head <ref>] [--json] [-- <scope…>]
 import { gitRun } from './surfaces.mjs';
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
@@ -23,31 +24,33 @@ const windowsOf = (lines) => {
   return out;
 };
 
-// Every text blob at `rev` under `paths` (all tracked when empty): Map path → content.
+// Every text blob at `rev` under `paths` (all tracked when empty): Map path → content. The batch is
+// asked by object id (a path may hold a newline) and read as bytes (a blob need not be UTF-8).
 function blobsAt(root, rev, paths) {
-  const ls = gitRun(root, ['ls-tree', '-r', '-z', '--name-only', rev, '--', ...paths]);
+  const ls = gitRun(root, ['ls-tree', '-r', '-z', rev, '--', ...paths]);
   if (ls.status !== 0) return new Map();
-  const names = ls.stdout.split('\0').filter(Boolean);
-  if (!names.length) return new Map();
-  const batch = gitRun(root, ['cat-file', '--batch'], names.map((n) => `${rev}:${n}`).join('\n') + '\n');
+  const entries = ls.stdout.split('\0').filter(Boolean).map((e) => /^\d+ (\S+) (\S+)\t([\s\S]+)$/.exec(e)).filter((m) => m && m[1] === 'blob');
+  if (!entries.length) return new Map();
+  const batch = spawnSync('git', ['cat-file', '--batch'], { cwd: root, input: entries.map((m) => `${m[2]}\n`).join(''), maxBuffer: 64 * 1024 * 1024 });
+  if (batch.status === null || batch.error?.code === 'ENOBUFS') throw new Error(`git cat-file did not finish (${batch.error ? batch.error.code || batch.error.message : batch.signal})`);
   const out = new Map();
   let pos = 0; let k = 0;
-  const buf = Buffer.from(batch.stdout, 'utf8');   // sizes in the header are bytes
-  while (pos < buf.length && k < names.length) {
+  const buf = batch.stdout;
+  while (pos < buf.length && k < entries.length) {
     const nl = buf.indexOf(10, pos);
     if (nl < 0) break;
-    const header = buf.slice(pos, nl).toString('utf8');
-    const m = /^\S+ (\S+) (\d+)$/.exec(header);
-    if (!m) { pos = nl + 1; k++; continue; }   // "missing": the path is not at this revision
+    const m = /^\S+ (\S+) (\d+)$/.exec(buf.subarray(pos, nl).toString('latin1'));
+    if (!m) { pos = nl + 1; k++; continue; }   // "missing": not at this revision
     const size = Number(m[2]);
-    const body = buf.slice(nl + 1, nl + 1 + size);
-    if (m[1] === 'blob' && size <= MAX_FILE && isText(body)) out.set(names[k], body.toString('utf8'));
+    const body = buf.subarray(nl + 1, nl + 1 + size);
+    if (m[1] === 'blob' && size <= MAX_FILE && isText(body)) out.set(entries[k][3], body.toString('utf8'));
     pos = nl + 1 + size + 1; k++;
   }
   return out;
 }
 
 function metricsAt(root, rev, changed) {
+  // deferred: one full read of the tracked tree per revision (the 64 MiB cap in gitRun turns a larger one into "not measured"), revisit when a repository reports it
   const all = blobsAt(root, rev, []);
   const seen = new Map();
   for (const text of all.values()) for (const w of windowsOf(normalized(text))) seen.set(w, (seen.get(w) || 0) + 1);
