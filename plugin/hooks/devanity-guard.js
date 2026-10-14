@@ -129,11 +129,13 @@ function writtenPaths(command) {
 
 const clip = (text) => rt.clip(text, 160);
 
+const header = (tool, rel, via) => `devanity: blocked ${tool} on ${rel}${via ? ` (via: ${via})` : ''}`;
+
 function pathMessage(tool, rel, rule, via) {
   const id = suggestId(rel);
   const scope = rule.glob || rel;
   return [
-    `devanity: blocked ${tool} on ${rel}${via ? ` (via: ${via})` : ''}`,
+    header(tool, rel, via),
     `  rule: ${rule.glob ? `${rule.glob} → tier ${rule.tier}` : `tier ${rule.tier}`}${rule.builtin ? ' (built-in: protects the rules and the ledger)' : ' (devanity.rules.json)'}`,
     // Why the path is guarded, from the map a human wrote: the one who decides sees what is at stake.
     ...(rule.purpose ? [`  what it is: ${clip(rule.purpose)}`] : []),
@@ -167,7 +169,7 @@ function roleMessage(tool, rel, role, via) {
     ? 'the implementer never writes a test file; the oracle-author does (plugin/agents/oracle-author.md)'
     : 'the oracle-author writes only test files (devanity.rules.json#tests); the implementer writes the rest';
   return [
-    `devanity: blocked ${tool} on ${rel}${via ? ` (via: ${via})` : ''}`,
+    header(tool, rel, via),
     `  role: ${role} (agent_type): ${why}`,
     `  Next step: hand the file to the other role, or record the human decision with: ${DECIDE_HINT} ${suggestId(rel)} <option> --path ${rel}`,
   ].join('\n');
@@ -189,7 +191,7 @@ function inApproved(ceiling, rel) {
 }
 function scopeMessage(tool, rel, ceiling, via) {
   return [
-    `devanity: blocked ${tool} on ${rel}${via ? ` (via: ${via})` : ''}`,
+    header(tool, rel, via),
     `  outside the scope approved for change ${ceiling.contract}: ${ceiling.approved.join(', ')} (decision ${ceiling.decisions.join(', ')} and the change's scope)`,
     `  Next step: a human widens it with: ${DECIDE_HINT} S-${suggestId(rel).slice(2)} <option> --path <glob>, or the change closes`,
   ].join('\n');
