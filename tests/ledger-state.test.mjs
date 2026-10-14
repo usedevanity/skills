@@ -129,7 +129,7 @@ const decideBlock = (id, question, extra = {}) => [
   '  - decision: how a refund is computed',
   '  - context: the ticket asks for refunds; no rule exists · anchors G-004',
   `  - options: ${extra.options || 'prorate by days used → partial refunds · full refund in 14 days → simple, costlier · no-op → refunds stay manual'}`,
-  '  - recommendation: prorate, it matches the billing invariant',
+  `  - recommendation: ${extra.recommendation || 'prorate, it matches the billing invariant'}`,
   '  - if undecided: refund() stays a failing stub',
 ].join('\n');
 
@@ -491,7 +491,7 @@ describe('ledger CLI (F3.7)', () => {
       contracts: { open: 1, done: 1, abandoned: 1, expired: 1 },
       events: { blocked: 1, would_block: 2 },
       attention: { human_turns: 0, decide: 0, command: 0, message: 0, in_open_change: 0 },
-      recommendation: { decided: 1, scored: 0, matched: 0, by_kind: {} },
+      recommendation: { decided: 1, scored: 0, matched: 0, by_kind: {}, log_loss: { scored: 0, mean: null } },
       principles: { candidates: [] },
       cost: { changes: 0, median_files: null, median_lines: null, median_areas: null, scoped_changes: 0, scoped_files: 0, in_scope: 0, scope_coverage: null },
     });
@@ -546,6 +546,22 @@ describe('never hang, never crash', () => {
     }
     const r = await run(INJECT, { input: sessionStart(d), args: ['SessionStart'], cwd: d });
     assert.ok(r.stdout.includes(CHANGE_HEADING), 'the torn line is skipped, the record before it still counts');
+  });
+});
+
+describe('a recommendation with a probability is scored by log-loss (A5)', () => {
+  test('p=<0–1> on the recommended label gives each decided answer its loss; the mean rides on stats, overall and per kind; without p nothing is scored', async () => {
+    const d = repo();
+    const opts = 'prorate → fair · full refund in 14 days → simpler · no-op → none';
+    for (const [id, rec] of [['G-001', 'prorate (p=0.8); the fairest'], ['G-002', 'prorate p=0.8'], ['G-003', 'prorate; no number']]) {
+      await run(ORACLE, { input: stopPayload(d, decideBlock(id, `Refunds ${id}?`, { options: opts, recommendation: rec })), cwd: d });
+    }
+    await run(MODE, { input: prompt(d, '/devanity decide G-001 prorate, G-002 full refund in 14 days, G-003 prorate --path billing/**'), cwd: d });
+    const s = ledger.stats(d);
+    // G-001: chosen the recommended, -ln 0.8 = 0.22; G-002: chosen another of the three, its share is (1 - 0.8) / 2, -ln 0.1 = 2.30; G-003: no p, not scored
+    assert.deepEqual(s.recommendation.log_loss, { scored: 2, mean: 1.26 });
+    assert.equal(s.recommendation.by_kind.rule.log_loss.scored, 2);
+    assert.match(spawnSync(process.execPath, [LEDGER, 'stats'], { cwd: d, encoding: 'utf8' }).stdout, /^recommendation: .*log-loss 1\.26 over 2/m);
   });
 });
 
@@ -630,7 +646,7 @@ describe('attention ledger (A0.1, A0.2)', () => {
     assert.equal(byId['G-3'].option, undefined, 'a rejection is not a chosen option');
     assert.equal(byId['G-4'].option, undefined, 'no options to match');
     assert.equal(byId['G-5'].option, undefined, 'an ambiguous first word matches nothing');
-    assert.deepEqual(ledger.stats(d).recommendation, { decided: 4, scored: 2, matched: 1, by_kind: { rule: { scored: 2, matched: 1 } } });
+    assert.deepEqual(ledger.stats(d).recommendation, { decided: 4, scored: 2, matched: 1, by_kind: { rule: { scored: 2, matched: 1, log_loss: { scored: 0, mean: null } } }, log_loss: { scored: 0, mean: null } });
     const r = await run(LEDGER, { args: ['stats'], cwd: d });
     assert.match(r.stdout, /^recommendation: 2 of 4 decided answers scored · 1 matched the recommendation \(rule 1\/2\)$/m, r.stdout);
   });

@@ -58,6 +58,8 @@ External or unknown project code requires real sandboxing or explicit risk accep
 9. Check resolved architecture/product decisions only to the extent the brief makes them verifiable; do not redesign them.
 10. Re-check target identity before the terminal verdict when verification spans multiple reads/commands.
 
+When the brief permits it, one probe may be the mutant run (`node "${CLAUDE_PLUGIN_ROOT}/scripts/mutants.mjs" --base <ref> --check <the declared check>`): it mutates each changed non-test line in a detached copy of the tree and runs the check; every surviving mutant is a line the oracle does not pin and goes under `FINDINGS` as insufficient oracle quality, never as a defect in the code.
+
 A minimal counterexample is preferred only when it preserves the evidence needed to justify the verdict. Completeness still wins over brevity: every required obligation must be accounted for, and materially independent failures must not be hidden merely to keep feedback short.
 
 ## Probe budget
