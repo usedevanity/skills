@@ -435,7 +435,8 @@ function decide(payload, env = process.env) {
   const contractId = agent.contract || (contract ? contract.fields.id : null) || 'adhoc';
   // `probes` is the verifier's count (run/survived); the oracle records it and never measures it.
   const paths = info ? changedPaths(root, info.head) : [];
-  const scope = contract && contract.fields.scope !== undefined ? contract.fields.scope : (ledger.contracts(root).find((c) => c.id === contractId) || {}).scope;
+  // The block's scope, else the ledger's: an empty `scope:` line records nothing, so it decides nothing either.
+  const scope = (contract && contract.fields.scope) || (ledger.contracts(root).find((c) => c.id === contractId) || {}).scope;
   const base = { kind: 'proof', contract: contractId, check: null, agent_check: agent.check || null, head: info ? info.head : null, agent_status: agentStatus, probes: agent.probes || null, pending, enforce, ...(info ? { ...changeCost(root, info.head, loaded.rules, paths), ...scopeCoverage(scope, paths) } : {}) };
 
   // An honest NOT_VERIFIED, or a status that claims nothing, needs no re-run. One of them asks:

@@ -105,8 +105,11 @@ describe('oracle: the declared scope over the real diff (A0.5), and the parent o
     // the next proof names the contract by id only: the scope comes from the ledger
     r = await runHook(ORACLE, { input: stopPayload(d, 'Again.\n\n```\n' + proofBlock({ contract: 'C-7', check: 'x', failed_before: 'no', passed_after: 'no', status: 'NOT_VERIFIED: check fails after', pending: 0 }) + '\n```\n'), env: baseEnv(), cwd: d });
     assert.equal(readLedger(d, 'proofs')[1].in_scope, 1, 'an honest NOT_VERIFIED under the same change carries the coverage too');
+    // a block with an empty `scope:` line records no scope (persistContract skips it), so the ledger's decides, as for the record itself
+    await runHook(ORACLE, { input: stopPayload(d, 'Again.\n\n```\n' + contractBlock({ id: 'C-7', phase: 'EXECUTE', scope: '' }) + '\n\n' + proofBlock({ check: 'x', failed_before: 'no', passed_after: 'no', status: 'NOT_VERIFIED: check fails after', pending: 0 }) + '\n```\n'), env: baseEnv(), cwd: d });
+    assert.equal(readLedger(d, 'proofs').at(-1).in_scope, 1, 'an empty scope line in the block does not hide the ledger scope');
     r = await runHook(ORACLE, { input: stopPayload(d, claimVerified('node --test mod.test.js')), env: baseEnv(), cwd: d });
-    const adhoc = readLedger(d, 'proofs')[2];
+    const adhoc = readLedger(d, 'proofs').at(-1);
     assert.ok(!('in_scope' in adhoc) && !('out_of_scope' in adhoc), 'no declared scope: no coverage fields');
     const ledgerMod = require(join(root, 'plugin', 'hooks', 'devanity-ledger.js'));
     assert.equal(ledgerMod.stats(d).cost.scope_coverage, 0.5);
