@@ -141,6 +141,16 @@ describe('oracle: a gated node is closed on SubagentStop over its own worktree (
     assert.equal(p.status, 'VERIFIED'); assert.equal(p.measured, true); assert.equal(p.node, 'a7'); assert.equal(p.in_scope, 1);
     const c = readLedger(d, 'contracts').find((x) => x.id === 'C-9');
     assert.equal(c.agent, 'a7'); assert.equal(c.parent, 'C-0');
+    // the node's proof is only ever its own transcript: without agent_transcript_path the session's transcript is never judged as the node's
+    const before = readLedger(d, 'proofs').length;
+    let r2 = await runHook(ORACLE, { input: JSON.stringify({ hook_event_name: 'SubagentStop', session_id: 's1', cwd: d, agent_id: 'a7', agent_type: 'devanity:implementer', transcript_path: transcript, stop_hook_active: false }), env: baseEnv(), cwd: d });
+    assert.equal(r2.stdout.trim(), ''); assert.equal(readLedger(d, 'proofs').length, before, 'nothing measured, nothing recorded');
+    // an agent_id is a token: a path in it never chooses the tree
+    r2 = await runHook(ORACLE, { input: JSON.stringify({ hook_event_name: 'SubagentStop', session_id: 's1', cwd: d, agent_id: '../../' + d.split('/').pop(), agent_type: 'devanity:implementer', agent_transcript_path: transcript, stop_hook_active: false }), env: baseEnv(), cwd: d });
+    assert.equal(readLedger(d, 'proofs').length, before, 'a malformed agent_id measures nothing');
+    // a read-only role never owes a proof: a verifier quoting a block is not a claim
+    r2 = await runHook(ORACLE, { input: JSON.stringify({ ...JSON.parse(payload), agent_type: 'devanity:verifier' }), env: baseEnv(), cwd: d });
+    assert.equal(r2.stdout.trim(), ''); assert.equal(readLedger(d, 'proofs').length, before, 'a verifier\'s stop is never measured');
   });
 });
 

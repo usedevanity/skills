@@ -166,11 +166,15 @@ function persistContract(root, fields, sid, agentId) {
 // A gated node (A4.2): on SubagentStop the proof is the subagent's, in its transcript, and the
 // tree it is measured in is the node's worktree (`isolation: worktree` puts it under
 // .claude/worktrees/agent-<id>, measured on 2.1.296) when that directory exists, else the payload's cwd.
-function nodeCwd(payload) {
+const AGENT_ID = /^[A-Za-z0-9_-]+$/;   // a token from the host; a path in it never chooses the tree
+function nodeId(payload) {
+  return payload.hook_event_name === 'SubagentStop' && AGENT_ID.test(String(payload.agent_id || '')) ? String(payload.agent_id) : null;
+}
+function nodeCwd(payload, agentId) {
   const cwd = payload.cwd && typeof payload.cwd === 'string' ? payload.cwd : process.cwd();
-  if (payload.hook_event_name !== 'SubagentStop' || !payload.agent_id) return cwd;
+  if (!agentId) return cwd;
   const top = rt.gitToplevel(cwd);
-  const wt = top ? path.join(top, '.claude', 'worktrees', `agent-${String(payload.agent_id)}`) : null;
+  const wt = top ? path.join(top, '.claude', 'worktrees', `agent-${agentId}`) : null;
   try { if (wt && fs.statSync(wt).isDirectory()) return wt; } catch (e) { /* no worktree: the node wrote in place */ }
   return cwd;
 }
@@ -421,9 +425,15 @@ function block(reason) {
 
 function decide(payload, env = process.env) {
   if (rt.readState() === 'off') return { action: 'exit' };
-  const cwd = nodeCwd(payload);
-  const agentId = payload.hook_event_name === 'SubagentStop' && payload.agent_id ? String(payload.agent_id) : null;
-  const transcript = (agentId && payload.agent_transcript_path) || payload.transcript_path;
+  // A node's stop (A4.2): a read-only role never owes a proof, a malformed agent id names no node,
+  // and the message judged is the node's own (its transcript), never the session's.
+  if (payload.hook_event_name === 'SubagentStop') {
+    const role = rt.agentRole(payload.agent_type);
+    if (role === 'verifier' || role === 'worker' || !nodeId(payload)) return { action: 'exit' };
+  }
+  const agentId = nodeId(payload);
+  const cwd = nodeCwd(payload, agentId);
+  const transcript = agentId ? payload.agent_transcript_path : payload.transcript_path;
   const message = typeof payload.last_assistant_message === 'string' && payload.last_assistant_message
     ? payload.last_assistant_message
     : (transcript ? lastAssistantFromTranscript(transcript) : '');
