@@ -135,8 +135,11 @@ function validate(raw) {
       if (rule.core !== undefined && typeof rule.core !== 'boolean') bad(`paths["${glob}"].core must be true or false`);
       if (rule.delta !== undefined && (!rule.delta || typeof rule.delta !== 'object' || Array.isArray(rule.delta))) bad(`paths["${glob}"].delta must be an object {files?, lines?}`);
       else if (rule.delta !== undefined) {
-        known(rule.delta, ['files', 'lines'], `paths["${glob}"].delta`);
+        known(rule.delta, ['files', 'lines', 'entropy'], `paths["${glob}"].delta`);
         for (const k of ['files', 'lines']) if (rule.delta[k] !== undefined && !(Number.isInteger(rule.delta[k]) && rule.delta[k] >= 1)) bad(`paths["${glob}"].delta.${k} must be an integer >= 1`);
+        // The entropy ratchet (A3.3): the reference CI job fails a change that leaves this glob with
+        // more duplication, suppressions or casts than its base had. Opt-in, one value.
+        if (rule.delta.entropy !== undefined && rule.delta.entropy !== 'ratchet') bad(`paths["${glob}"].delta.entropy must be "ratchet"`);
       }
     }
   }

@@ -50,6 +50,12 @@
               "lines": {
                 "type": "integer",
                 "minimum": 1
+              },
+              "entropy": {
+                "enum": [
+                  "ratchet"
+                ],
+                "description": "Opt-in (A3.3): the reference CI job fails a change that leaves this glob with more duplication (5-line windows seen elsewhere), suppressions or casts than its base had. Measured by plugin/scripts/entropy.mjs; reported for every change, enforced only here."
               }
             }
           },
