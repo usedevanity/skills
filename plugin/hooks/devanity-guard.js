@@ -139,7 +139,7 @@ function pathMessage(tool, rel, rule, via) {
     `  rule: ${rule.glob ? `${rule.glob} → tier ${rule.tier}` : `tier ${rule.tier}`}${rule.builtin ? ' (built-in: protects the rules and the ledger)' : ' (devanity.rules.json)'}`,
     // Why the path is guarded, from the map a human wrote: the one who decides sees what is at stake.
     ...(rule.purpose ? [`  what it is: ${clip(rule.purpose)}`] : []),
-    ...(Array.isArray(rule.invariants) && rule.invariants.length ? [`  never changes: ${rule.invariants.slice(0, 3).map(clip).join('; ')}${rule.invariants.length > 3 ? '; …' : ''}`] : []),
+    ...(Array.isArray(rule.invariants) && rule.invariants.length ? [`  never changes: ${rule.invariants.slice(0, 3).map((v) => clip(rules.invariantText(v))).join('; ')}${rule.invariants.length > 3 ? '; …' : ''}`] : []),
     '  A high-risk path needs a human decision recorded in the ledger before any tool may write to it.',
     `  Next step: Record the human decision with: ${DECIDE_HINT} ${id} <option> --path ${scope}`,
     '  (typed by the human as a whole message; the agent does not record it — propose the change and stop)',

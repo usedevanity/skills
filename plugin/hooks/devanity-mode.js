@@ -97,7 +97,7 @@ function pendingList(cwd) {
       str(d.options) && `    options: ${rt.clip(d.options, 400)}`,
       str(d.recommendation) && `    recommendation: ${rt.clip(d.recommendation, 400)}`,
       str(d.if_undecided) && `    if undecided: ${rt.clip(d.if_undecided, 400)}`,
-      rule && Array.isArray(rule.invariants) && rule.invariants.length && `    never changes: ${rule.invariants.slice(0, 3).map((v) => rt.clip(v, 160)).join('; ')}${rule.invariants.length > 3 ? '; …' : ''}`,
+      rule && Array.isArray(rule.invariants) && rule.invariants.length && `    never changes: ${rule.invariants.slice(0, 3).map((v) => rt.clip(rulesMod.invariantText(v), 160)).join('; ')}${rule.invariants.length > 3 ? '; …' : ''}`,
     ].filter(Boolean);
     return [head, ...detail].join('\n');
   });

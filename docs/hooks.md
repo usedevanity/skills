@@ -206,7 +206,7 @@ Map (high-risk: rung 4, propose and stop; core: rung 5, its invariants survive p
 - `src/ui/**` normal: React views; no data access here
 ```
 
-This is the **repository map** (SPEC §0.4): one line per path that declares a `purpose`, `invariants`, `core` or the high-risk tier, high-risk first, then core. Hard cap: 1,600 characters (about 400 tokens). The fixed lines always fit; entries are added whole while they fit, and the rest is named (`… N more path(s) in devanity.rules.json`), never cut mid-line. No rules file, or an invalid one, adds nothing.
+This is the **repository map** (SPEC §0.4): one line per path that declares a `purpose`, `invariants`, `core` or the high-risk tier, high-risk first, then core. An invariant is a string, or a **principle** (A2.1): `{id, rule, kind?, from: [decision ids] | declared: true, check?}`, rendered as `id: rule` wherever invariants appear (the map, a guard block, the pending list); the loader refuses a principle with neither provenance, and one id with two rules. Hard cap: 1,600 characters (about 400 tokens). The fixed lines always fit; entries are added whole while they fit, and the rest is named (`… N more path(s) in devanity.rules.json`), never cut mid-line. No rules file, or an invalid one, adds nothing.
 
 ## Reference CI job (`plugin/scripts/devanity-rules-ci.mjs`)
 

@@ -283,7 +283,7 @@ if (base && rulesMod && !loaded.errors.length) {
     const out = ['## What was at stake', ''];
     for (const [glob, { rule: r, files: fs }] of stakes) {
       out.push(`- ${md(glob)} (${r.tier}${r.core ? ', core' : ''}): ${fs.length} file(s)${r.purpose ? ` — ${md(r.purpose)}` : ''}`);
-      for (const inv of r.invariants || []) out.push(`  - never changes: ${md(inv)}`);
+      for (const inv of r.invariants || []) out.push(`  - never changes: ${md(rulesMod.invariantText(inv))}`);
       if (r.tier !== 'high-risk') continue;
       const why = [];
       if (!r.check) why.push('no declared check');

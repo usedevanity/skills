@@ -490,6 +490,20 @@ describe('never hang, never crash', () => {
   });
 });
 
+describe('principles in the map (A2.1)', () => {
+  test('a principle object renders as `id: rule` wherever an invariant is shown: the injected map and the guard block', async () => {
+    const d = repo();
+    writeFileSync(join(d, 'devanity.rules.json'), JSON.stringify({ version: 1, paths: { 'billing/**': { tier: 'high-risk', invariants: ['refunds never exceed the charge', { id: 'P-001', rule: 'amounts are integer cents', from: ['G-031'] }] } } }));
+    const ctx = await run(INJECT, { input: sessionStart(d), args: ['SessionStart'], cwd: d });
+    assert.ok(ctx.stdout.includes('P-001: amounts are integer cents') && !ctx.stdout.includes('[object'), ctx.stdout);
+    mkdirSync(join(d, 'billing'), { recursive: true });
+    const g = await run(join(hooksDir, 'devanity-guard.js'), { input: JSON.stringify({ hook_event_name: 'PreToolUse', session_id: 's1', cwd: d, tool_name: 'Edit', tool_input: { file_path: join(d, 'billing', 'x.py') } }), cwd: d });
+    assert.equal(g.code, 2); assert.ok(g.stderr.includes('P-001: amounts are integer cents'), g.stderr);
+    const m = await run(MODE, { input: prompt(d, '/devanity pending'), cwd: d });
+    assert.ok(!m.stdout.includes('[object'), m.stdout);
+  });
+});
+
 describe('attention ledger (A0.1, A0.2)', () => {
   test('every human prompt is one human_turn event: its type, size and the open change, never its text', async () => {
     const d = repo();
