@@ -7,7 +7,7 @@
 // oracle quality. The working tree is never touched. Exit 1 on usage or a check that fails unmutated.
 //   node mutants.mjs --base <ref> --check <command> [--json] [--max <n>] [-- <scope…>]
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, writeFileSync, rmSync, rmdirSync, mkdirSync, existsSync, copyFileSync, statSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync, rmSync, rmdirSync, mkdirSync, copyFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -51,7 +51,8 @@ function mutantsOf(line) {
 function changedLines(root, base, scope, rules) {
   const d = gitRun(root, ['diff', '--name-only', '-z', '--no-renames', base, '--', ...scope]);
   if (d.status !== 0) throw new Error(`git diff failed: ${(d.stderr || '').trim()}`);
-  const files = [...new Set(d.stdout.split('\0').filter(Boolean))].filter((f) => !rulesMod.isTestPath(rules, f) && existsSync(join(root, f)));
+  const isFile = (f) => { try { return statSync(join(root, f)).isFile(); } catch (e) { return false; } };   // deleted, or a directory now: nothing to mutate
+  const files = [...new Set(d.stdout.split('\0').filter(Boolean))].filter((f) => !rulesMod.isTestPath(rules, f) && isFile(f));
   const out = [];
   for (const f of files) {
     const buf = readFileSync(join(root, f));

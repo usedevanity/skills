@@ -277,6 +277,7 @@ test('mutants: every changed non-test line gets its operator mutants, each run a
   commit(d, { 'gone.js': 'module.exports = 2;\n', 'sub/h.js': 'module.exports = 3;\n' }, 'more');
   rmSync(join(d, 'gone.js')); mkdirSync(join(d, 'gone.js')); writeFileSync(join(d, 'gone.js', 'inner.txt'), 'x\n');
   rmSync(join(d, 'sub'), { recursive: true });
-  r = run(MUTANTS, ['--base', 'HEAD~3', '--check', 'test -f gone.js/inner.txt && test ! -e sub && node --test mod.test.js', '--json'], { cwd: d, env });
+  r = run(MUTANTS, ['--base', 'HEAD', '--check', 'test -f gone.js/inner.txt && test ! -e sub && node --test mod.test.js', '--json'], { cwd: d, env });   // both tracked at the base: the diff lists them
   assert.equal(r.code, 0, `a directory in place of a file, and a removed directory, must be mirrored: ${r.err}`);
+  assert.equal(JSON.parse(r.out).total, 0, 'a directory and a deleted file hold no line to mutate');
 });
