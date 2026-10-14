@@ -117,6 +117,33 @@ describe('oracle: the declared scope over the real diff (A0.5), and the parent o
   });
 });
 
+describe('oracle: a gated node is closed on SubagentStop over its own worktree (A4.2)', () => {
+  test('the proof in the subagent transcript is measured in .claude/worktrees/agent-<id>, the contract records the agent, and nothing is read from the session cwd', async () => {
+    const d = fresh();
+    initRepo(d);
+    writeFileSync(join(d, 'mod.js'), 'module.exports = (a, b) => a - b;\n');
+    writeFileSync(join(d, 'devanity.rules.json'), JSON.stringify({ version: 1, paths: { 'mod.js': { tier: 'normal', check: 'node --test mod.test.js' } } }));
+    commitAll(d);
+    const wt = join(d, '.claude', 'worktrees', 'agent-a7');
+    mkdirSync(join(d, '.claude', 'worktrees'), { recursive: true });
+    git(d, 'worktree', 'add', '-q', '--detach', wt, 'HEAD');
+    writeFileSync(join(wt, 'mod.js'), 'module.exports = (a, b) => a + b;\n');   // the fix and its test live only in the node's worktree
+    writeFileSync(join(wt, 'mod.test.js'), TEST_FILE);
+    const contractBlock = ['devanity-contract:', '  id: C-9', '  phase: EXECUTE', '  intent: fix add', '  scope: mod.js', '  parent: C-0'].join('\n');
+    const msg = 'Done.\n\n```\n' + contractBlock + '\n\n' + proofBlock({ check: 'node --test mod.test.js', failed_before: 'yes', passed_after: 'yes', status: 'VERIFIED', pending: 0 }) + '\n```\n';
+    const transcript = join(d, 'agent-a7.jsonl');
+    writeFileSync(transcript, JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: msg }] } }) + '\n');
+    const payload = JSON.stringify({ hook_event_name: 'SubagentStop', session_id: 's1', cwd: d, agent_id: 'a7', agent_type: 'devanity:implementer', agent_transcript_path: transcript, stop_hook_active: false });
+    const r = await runHook(ORACLE, { input: payload, env: baseEnv(), cwd: d });
+    assert.equal(r.code, 0, r.stderr);
+    assert.equal(r.stdout.trim(), '', `measured in the session cwd, not the node's worktree:\n${r.stdout}`);
+    const p = readLedger(d, 'proofs').at(-1);
+    assert.equal(p.status, 'VERIFIED'); assert.equal(p.measured, true); assert.equal(p.node, 'a7'); assert.equal(p.in_scope, 1);
+    const c = readLedger(d, 'contracts').find((x) => x.id === 'C-9');
+    assert.equal(c.agent, 'a7'); assert.equal(c.parent, 'C-0');
+  });
+});
+
 describe('oracle: an impossible obligation is an honest NOT_VERIFIED that asks (A1.2)', () => {
   const impossible = (conflict) => 'Blocked.\n\n```\n' + proofBlock({ check: 'node --test mod.test.js', failed_before: 'n/a', passed_after: 'n/a', status: `NOT_VERIFIED: impossible: ${conflict}`, pending: 0 }) + '\n```\n';
   const prompt = (cwd, text) => JSON.stringify({ hook_event_name: 'UserPromptSubmit', session_id: 'h1', cwd, prompt: text });

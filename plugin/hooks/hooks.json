@@ -61,6 +61,18 @@
           }
         ]
       }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/devanity-oracle.js\"",
+            "timeout": 150,
+            "statusMessage": "devanity: measuring the node's proof block..."
+          }
+        ]
+      }
     ]
   }
 }

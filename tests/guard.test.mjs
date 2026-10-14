@@ -564,6 +564,27 @@ describe('failure paths leave a trace (map invariant for hooks/**)', () => {
   });
 });
 
+describe('guard: one writer per area (A4.2)', () => {
+  const as = (id) => ({ agent_type: 'devanity:implementer', agent_id: id });
+  const child = (d, fields) => ledger.append(d, 'contracts', { id: 'C-1', phase: 'EXECUTE', parent: 'C-0', agent: 'a1', scope: 'src/**', intent: 'retries', ...fields }, 's1');
+  test('a write into the scope an open child change holds blocks every other writer, naming the child and its agent; the holder, a closed child, and a human decision on the path pass', async () => {
+    const d = repo();
+    ledger.append(d, 'contracts', { id: 'C-0', phase: 'EXECUTE', scope: 'src/** docs/**', intent: 'milestone' }, 's1');
+    child(d, {});
+    writeFileSync(join(d, 'src', 'x.py'), 'a\n');
+    assertBlocked(await run(GUARD, { input: edit(d, 'src/x.py', as('a2')), cwd: d }), 'src/x.py', 'C-1', 'a1');
+    assertBlocked(await run(GUARD, { input: edit(d, 'src/x.py'), cwd: d }), 'C-1');   // the main session is another writer too
+    assertAllowed(await run(GUARD, { input: edit(d, 'src/x.py', as('a1')), cwd: d }));
+    assertAllowed(await run(GUARD, { input: edit(d, 'docs/x.md', as('a2')), cwd: d }));   // outside the held area
+    assert.equal(events(d).filter((e) => e.kind === 'blocked' && e.held).length, 2);
+    await run(MODE, { input: prompt(d, '/devanity decide D-src fix --path src/x.py'), cwd: d });
+    assertAllowed(await run(GUARD, { input: edit(d, 'src/x.py', as('a2')), cwd: d }));
+    child(d, { phase: 'DONE' });
+    writeFileSync(join(d, 'src', 'y.py'), 'a\n');
+    assertAllowed(await run(GUARD, { input: edit(d, 'src/y.py', as('a2')), cwd: d }), 'a closed child holds nothing');
+  });
+});
+
 describe('guard: roles by agent_type (A1.3)', () => {
   const as = (type) => ({ agent_type: type, agent_id: 'a1' });
   test('the implementer never writes a test file; the oracle-author writes only test files; a human decision on the path lifts either', async () => {

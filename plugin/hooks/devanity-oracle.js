@@ -155,11 +155,24 @@ function persistDecisions(root, blocks, sid) {
   }
 }
 
-function persistContract(root, fields, sid) {
+function persistContract(root, fields, sid, agentId) {
   const rec = { id: fields.id, phase: fields.phase };
   // `parent` (A4.1): a child change of a milestone names it; nothing else about composition is enforced here.
   for (const k of ['intent', 'scope', 'forbidden', 'proof', 'pending', 'parent']) if (fields[k] !== undefined && fields[k] !== '') rec[k] = fields[k];
+  if (agentId) rec.agent = agentId;   // the node that declared it (A4.2): the guard's one writer per area, the inject's own change
   return ledger.append(root, 'contracts', rec, sid);
+}
+
+// A gated node (A4.2): on SubagentStop the proof is the subagent's, in its transcript, and the
+// tree it is measured in is the node's worktree (`isolation: worktree` puts it under
+// .claude/worktrees/agent-<id>, measured on 2.1.296) when that directory exists, else the payload's cwd.
+function nodeCwd(payload) {
+  const cwd = payload.cwd && typeof payload.cwd === 'string' ? payload.cwd : process.cwd();
+  if (payload.hook_event_name !== 'SubagentStop' || !payload.agent_id) return cwd;
+  const top = rt.gitToplevel(cwd);
+  const wt = top ? path.join(top, '.claude', 'worktrees', `agent-${String(payload.agent_id)}`) : null;
+  try { if (wt && fs.statSync(wt).isDirectory()) return wt; } catch (e) { /* no worktree: the node wrote in place */ }
+  return cwd;
 }
 
 // The declared scope over the real diff (A0.5): how many changed paths the change's `scope`
@@ -408,10 +421,12 @@ function block(reason) {
 
 function decide(payload, env = process.env) {
   if (rt.readState() === 'off') return { action: 'exit' };
-  const cwd = payload.cwd && typeof payload.cwd === 'string' ? payload.cwd : process.cwd();
+  const cwd = nodeCwd(payload);
+  const agentId = payload.hook_event_name === 'SubagentStop' && payload.agent_id ? String(payload.agent_id) : null;
+  const transcript = (agentId && payload.agent_transcript_path) || payload.transcript_path;
   const message = typeof payload.last_assistant_message === 'string' && payload.last_assistant_message
     ? payload.last_assistant_message
-    : (payload.transcript_path ? lastAssistantFromTranscript(payload.transcript_path) : '');
+    : (transcript ? lastAssistantFromTranscript(transcript) : '');
   const found = findProofBlock(message);
   const contract = findContractBlock(message);
   const decides = findDecideBlocks(message);
@@ -422,7 +437,7 @@ function decide(payload, env = process.env) {
   if (decides.length) persistDecisions(root, decides, sid);
   // The lifecycle block is persisted first and independently of the proof: a message that only
   // declares a phase records it and lets the turn end.
-  if (contract) persistContract(root, contract.fields, sid);
+  if (contract) persistContract(root, contract.fields, sid, agentId);
   if (!found) return { action: 'exit' };
   const agent = found.fields;
   const agentStatus = String(agent.status || '').trim();
@@ -437,7 +452,7 @@ function decide(payload, env = process.env) {
   const paths = info ? changedPaths(root, info.head) : [];
   // The block's scope, else the ledger's: an empty `scope:` line records nothing, so it decides nothing either.
   const scope = (contract && contract.fields.scope) || (ledger.contracts(root).find((c) => c.id === contractId) || {}).scope;
-  const base = { kind: 'proof', contract: contractId, check: null, agent_check: agent.check || null, head: info ? info.head : null, agent_status: agentStatus, probes: agent.probes || null, pending, enforce, ...(info ? { ...changeCost(root, info.head, loaded.rules, paths), ...scopeCoverage(scope, paths) } : {}) };
+  const base = { kind: 'proof', contract: contractId, check: null, agent_check: agent.check || null, head: info ? info.head : null, agent_status: agentStatus, probes: agent.probes || null, pending, enforce, ...(agentId ? { node: agentId } : {}), ...(info ? { ...changeCost(root, info.head, loaded.rules, paths), ...scopeCoverage(scope, paths) } : {}) };
 
   // An honest NOT_VERIFIED, or a status that claims nothing, needs no re-run. One of them asks:
   // `NOT_VERIFIED: impossible: <conflict>` says the obligation and the declared check contradict

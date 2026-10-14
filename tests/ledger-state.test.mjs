@@ -320,6 +320,27 @@ describe('phase-aware injection (F3.2)', () => {
     assert.ok(!section.includes('parent:'), 'a change with no parent shows none');
   });
 
+  test('a node starts from its own change, or the milestone, and sees the family: done siblings with intent and scope, open ones as held areas (A4.2)', async () => {
+    const d = repo();
+    seedContract(d, { id: 'C-0', intent: 'the milestone', scope: 'src/**' });
+    seedContract(d, { id: 'C-1', parent: 'C-0', agent: 'a1', phase: 'DONE', intent: 'retries', scope: 'src/upload/**' });
+    seedContract(d, { id: 'C-2', parent: 'C-0', agent: 'a2', phase: 'EXECUTE', intent: 'the ui', scope: 'src/ui/**' });
+    // the session (no agent) continues the milestone, not the last-declared child
+    let r = await run(INJECT, { input: sessionStart(d), args: ['SessionStart'], cwd: d });
+    let section = r.stdout.slice(r.stdout.indexOf(CHANGE_HEADING));
+    assert.ok(section.startsWith('## Open change C-0'), section);
+    assert.ok(section.includes('done: C-1 (retries; src/upload/**)') && section.includes('open: C-2 (src/ui/**)'), section);
+    // the agent that declared C-2 continues C-2 and sees C-1 done
+    r = await run(INJECT, { input: JSON.stringify({ hook_event_name: 'SubagentStart', agent_id: 'a2', agent_type: 'devanity:implementer', cwd: d }), cwd: d });
+    section = parseSubagent(r.stdout); section = section.slice(section.indexOf(CHANGE_HEADING));
+    assert.ok(section.startsWith('## Open change C-2') && section.includes('parent: C-0') && section.includes('done: C-1') && !section.includes('open: C-2'), section);
+    // a new node (no change of its own yet) starts from the milestone and sees the held area
+    r = await run(INJECT, { input: JSON.stringify({ hook_event_name: 'SubagentStart', agent_id: 'a3', agent_type: 'devanity:implementer', cwd: d }), cwd: d });
+    section = parseSubagent(r.stdout); section = section.slice(section.indexOf(CHANGE_HEADING));
+    assert.ok(section.startsWith('## Open change C-0') && section.includes('open: C-2 (src/ui/**)'), section);
+    assert.ok(section.length <= 780, `section is ${section.length} chars`);
+  });
+
   test('a child change names its parent in the section (A4.1)', async () => {
     const d = repo();
     seedContract(d, { id: 'C-2', parent: 'C-1' });
