@@ -302,16 +302,35 @@ function attention(events, open) {
 // answer matched an offered label and the recommendation named one; per decide kind.
 function recommendation(dec) {
   const decided = dec.filter((d) => d.status === 'decided' && d.by === 'human');
-  const out = { decided: decided.length, scored: 0, matched: 0, by_kind: {} };
+  const out = { decided: decided.length, scored: 0, matched: 0, by_kind: {}, log_loss: { scored: 0, mean: null } };
+  const loss = { n: 0, sum: 0 };
   for (const d of decided) {
     const rec = d.option ? labelOf(d.options, d.recommendation) : null;
     if (!rec) continue;
     const kind = d.decide_kind || 'unknown';
-    const k = out.by_kind[kind] || (out.by_kind[kind] = { scored: 0, matched: 0 });
+    const k = out.by_kind[kind] || (out.by_kind[kind] = { scored: 0, matched: 0, log_loss: { scored: 0, mean: null }, _loss: { n: 0, sum: 0 } });
     out.scored++; k.scored++;
     if (rec === d.option) { out.matched++; k.matched++; }
+    // Log-loss (A5): `p=<0–1>` on the recommendation is the agent's probability that its pick is the
+    // answer; the rest is spread evenly over the other options. The loss is -ln of the probability
+    // the human's answer was given, so a confident miss costs more than a hedge.
+    const p = probabilityOf(d.recommendation);
+    const n = optionLabels(d.options).length;
+    if (p === null || n < 2) continue;
+    const q = Math.max(rec === d.option ? p : (1 - p) / (n - 1), 1e-3);
+    const l = -Math.log(q);
+    loss.n++; loss.sum += l; k._loss.n++; k._loss.sum += l;
   }
+  const mean = (x) => (x.n ? Math.round((x.sum / x.n) * 100) / 100 : null);
+  out.log_loss = { scored: loss.n, mean: mean(loss) };
+  for (const k of Object.values(out.by_kind)) { k.log_loss = { scored: k._loss.n, mean: mean(k._loss) }; delete k._loss; }
   return out;
+}
+function probabilityOf(text) {
+  const m = /\bp\s*=\s*(0?\.\d+|1(?:\.0+)?|0)(?![\d.])/.exec(String(text || ''));   // the whole number: `p=1.5` is not `p=1`
+  if (!m) return null;
+  const p = Number(m[1]);
+  return p > 0 && p <= 1 ? p : null;
 }
 
 function renderStats(s) {
@@ -323,7 +342,7 @@ function renderStats(s) {
     `contracts: ${s.contracts.open} open · ${s.contracts.done} done · ${s.contracts.abandoned} abandoned · ${s.contracts.expired} expired`,
     `guards: ${s.events.blocked} blocked · ${s.events.would_block} would_block`,
     `attention: ${s.attention.human_turns} human turns · ${s.attention.decide} decide · ${s.attention.command} command · ${s.attention.message} message · ${s.attention.in_open_change} in the open change`,
-    `recommendation: ${s.recommendation.scored} of ${s.recommendation.decided} decided answers scored · ${s.recommendation.matched} matched the recommendation${renderKinds(s.recommendation.by_kind)}`,
+    `recommendation: ${s.recommendation.scored} of ${s.recommendation.decided} decided answers scored · ${s.recommendation.matched} matched the recommendation${renderKinds(s.recommendation.by_kind)}${s.recommendation.log_loss.scored ? ` · log-loss ${s.recommendation.log_loss.mean} over ${s.recommendation.log_loss.scored}` : ''}`,
     s.principles.candidates.length
       ? `principles: ${s.principles.candidates.length} candidate${s.principles.candidates.length > 1 ? 's' : ''} · ${s.principles.candidates.map((c) => `${c.area} ${c.kind} ×${c.decisions.length} (${c.decisions.join(', ')})`).join(' · ')}`
       : 'principles: no candidate',

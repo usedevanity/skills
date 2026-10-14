@@ -14,6 +14,7 @@ const HOTSPOTS = join(root, 'plugin', 'scripts', 'hotspots.mjs');
 const CALIBRATE = join(root, 'plugin', 'scripts', 'calibrate.mjs');
 const SURFACES = join(root, 'plugin', 'scripts', 'surfaces.mjs');
 const ENTROPY = join(root, 'plugin', 'scripts', 'entropy.mjs');
+const MUTANTS = join(root, 'plugin', 'scripts', 'mutants.mjs');
 
 let temp;
 before(() => { temp = mkdtempSync(join(tmpdir(), 'devanity-scripts-')); });
@@ -245,4 +246,38 @@ test('entropy: duplication by 5-line window, new suppressions and new casts betw
   r = run(ENTROPY, ['--base', 'HEAD~2', '--json', '--', 'src/c.js'], { cwd: d });
   assert.equal(JSON.parse(r.out).files, 0, 'a scope narrows the set to what changed under it');
   assert.equal(run(ENTROPY, ['--bogus'], { cwd: d }).code, 1);
+});
+
+test('mutants: every changed non-test line gets its operator mutants, each run against the check; a survivor names its file, line and mutation (A5)', () => {
+  const d = join(temp, `m${++n}`); mkdirSync(d); git(d, 'init', '-q', '-b', 'main');
+  commit(d, { 'mod.js': 'module.exports = (a, b) => a - b;\n', 'mod.test.js': "const t=require('node:test');const a=require('node:assert');t('add',()=>a.equal(require('./mod.js')(1,2),3));\n" }, 'base');
+  // the fix changes two lines: the sum (the test pins it) and a guard the test never exercises
+  commit(d, { 'mod.js': 'module.exports = (a, b) => {\n  if (a < 0) throw new Error("negative");\n  return a + b;\n};\n' }, 'fix');
+  const env = { ...process.env }; delete env.NODE_TEST_CONTEXT;   // a `node --test` check spawned under this runner would report to it instead of failing on its own
+  let r = run(MUTANTS, ['--base', 'HEAD~1', '--check', 'node --test mod.test.js', '--json'], { cwd: d, env });
+  assert.equal(r.code, 0, r.err);
+  const j = JSON.parse(r.out);
+  assert.ok(j.total >= 3 && j.killed + j.survived === j.total, JSON.stringify(j));
+  assert.ok(j.killed >= 1, 'the sum line has a mutant the test kills (+ → -)');
+  const guard = j.survivors.filter((s) => s.file === 'mod.js' && s.line === 2);
+  assert.ok(guard.length >= 1, `the guard line's mutants survive: no test reaches a < 0\n${JSON.stringify(j.survivors)}`);
+  for (const s of j.survivors) assert.ok(s.file && s.line && s.from && s.to, JSON.stringify(s));
+  assert.equal(git(d, 'status', '--porcelain').stdout, '', 'the working tree is left as it was');
+  r = run(MUTANTS, ['--base', 'HEAD~1', '--check', 'node --test mod.test.js'], { cwd: d, env });
+  assert.match(r.out, /^mutants HEAD~1\.\.HEAD: \d+ run · \d+ killed · \d+ survived/m, r.out);
+  assert.match(r.out, /mod\.js:2 .*</, r.out);
+  assert.equal(run(MUTANTS, ['--check', 'x'], { cwd: d }).code, 1, '--base is required');
+  // an uncommitted deletion is part of the working tree the copy must mirror: a check that passes only without the file passes there too
+  commit(d, { 'helper.js': 'module.exports = 1;\n' }, 'helper');
+  rmSync(join(d, 'helper.js'));
+  r = run(MUTANTS, ['--base', 'HEAD~2', '--check', 'test ! -e helper.js && node --test mod.test.js', '--json'], { cwd: d, env });
+  assert.equal(r.code, 0, `a deleted file must be absent from the mutant tree: ${r.err}`);
+  assert.ok(JSON.parse(r.out).total >= 1);
+  // a tracked file replaced by a directory, and a removed subdirectory, are mirrored too: the copy holds no file and no empty directory where the working tree has none
+  commit(d, { 'gone.js': 'module.exports = 2;\n', 'sub/h.js': 'module.exports = 3;\n' }, 'more');
+  rmSync(join(d, 'gone.js')); mkdirSync(join(d, 'gone.js')); writeFileSync(join(d, 'gone.js', 'inner.txt'), 'x\n');
+  rmSync(join(d, 'sub'), { recursive: true });
+  r = run(MUTANTS, ['--base', 'HEAD', '--check', 'test -f gone.js/inner.txt && test ! -e sub && node --test mod.test.js', '--json'], { cwd: d, env });   // both tracked at the base: the diff lists them
+  assert.equal(r.code, 0, `a directory in place of a file, and a removed directory, must be mirrored: ${r.err}`);
+  assert.equal(JSON.parse(r.out).total, 0, 'a directory and a deleted file hold no line to mutate');
 });

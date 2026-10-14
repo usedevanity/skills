@@ -212,6 +212,18 @@ function heldMessage(tool, rel, held, via) {
   ].join('\n');
 }
 
+// The principle of a path reaches its writer (A5): an allowed write under a map entry with
+// invariants carries them as context, once per entry per session, so the rule is read before the
+// first edit and costs nothing after. PreToolUse `additionalContext` reaches the model (measured on
+// 2.1.299, headless); it never decides.
+function principleContext(root, loaded, rel, sid) {
+  const rule = rules.ruleFor(loaded.rules, rel);
+  if (!rule.glob || !Array.isArray(rule.invariants) || !rule.invariants.length) return '';
+  if (ledger.read(root, 'events').some((e) => e.kind === 'principle_injected' && e.session_id === sid && e.glob === rule.glob)) return '';
+  ledger.append(root, 'events', { kind: 'principle_injected', glob: rule.glob, path: rel }, sid);
+  return rt.clip(`devanity: \`${rule.glob}\` never changes: ${rule.invariants.map((v) => rules.invariantText(v)).join('; ')}`, 300);
+}
+
 // ---- evaluation -------------------------------------------------------------------------------
 
 // Returns null (allow) or {message, event, pending?}.
@@ -260,9 +272,10 @@ function evaluate(payload, env) {
     });
   };
 
+  let fileRel = null;
   if (FILE_TOOLS.has(tool)) {
     const target = input.file_path || input.notebook_path;
-    if (target) checkPath(String(target));
+    if (target) { fileRel = rules.relPath(root, path.isAbsolute(String(target)) ? String(target) : path.join(cwd, String(target))); checkPath(String(target)); }
   } else if (tool === 'Bash') {
     const command = String(input.command || '');
     // one guarded path blocks the command: past 50 found, the rest are only counted
@@ -274,7 +287,7 @@ function evaluate(payload, env) {
       findings.push({ message: authorityMessage(command, need, auth), event: { tool, command, authority: { need, have: auth.have } } });
     }
   }
-  if (!findings.length) return { allow: true };
+  if (!findings.length) return { allow: true, context: fileRel ? principleContext(root, loaded, fileRel, sid) : '' };
 
   for (const f of findings) {
     ledger.append(root, 'events', { kind: enforce ? 'blocked' : 'would_block', ...f.event }, sid);
@@ -315,8 +328,12 @@ function main() {
       ledger.append(payload.cwd || process.cwd(), 'events', { kind: 'guard_error', ...rt.errorTrace(e) }, payload.session_id || null);
       verdict = { allow: true, reason: 'guard error' };
     }
-    if (verdict.allow) rt.exitSoon(0);
-    else block(verdict.message);
+    if (!verdict.allow) block(verdict.message);
+    else if (!verdict.context) rt.exitSoon(0);
+    else {
+      const json = JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: verdict.context } });
+      try { process.stdout.write(json, () => rt.exitSoon(0)); } catch (e) { rt.exitSoon(0); }
+    }
   });
 }
 

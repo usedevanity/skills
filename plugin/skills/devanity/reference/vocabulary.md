@@ -46,7 +46,7 @@ Every stop-and-ask renders as this block. It renders a stop the kernel or a mode
   - derivation: <the principle tried (`id: rule` from the map, a decision already made, a sibling), and why it does not decide this; or `none applies`>
   - context: <why it surfaced: one line of evidence> · anchors <G-### or Key>
   - options: <A → durable consequence> · <B → durable consequence> (2–4, one a no-op; only options no other beats)
-  - recommendation: <the pick and its basis: labeled, never applied>
+  - recommendation: <the pick and its basis: labeled, never applied; `p=<0–1>` after the label, your probability that it is the answer, when you can give one>
   - if undecided: <the visible fate>
 ```
 

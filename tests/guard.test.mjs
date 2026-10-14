@@ -564,6 +564,27 @@ describe('failure paths leave a trace (map invariant for hooks/**)', () => {
   });
 });
 
+describe('guard: the principle of a path reaches the writer once (A5)', () => {
+  test('an allowed write under a map entry with invariants carries them as additionalContext, once per entry per session; a path with none, and a block, are unchanged', async () => {
+    const d = repo({ rules: { ...RULES, paths: { ...RULES.paths, 'src/**': { tier: 'normal', invariants: [{ id: 'P-1', rule: 'events are never renamed', declared: true }, 'no data access here'] } } } });
+    writeFileSync(join(d, 'src', 'x.py'), 'a\n');
+    let r = await run(GUARD, { input: edit(d, 'src/x.py'), cwd: d });
+    assert.equal(r.code, 0, r.stderr);
+    const out = JSON.parse(r.stdout).hookSpecificOutput;
+    assert.equal(out.hookEventName, 'PreToolUse');
+    assert.ok(out.additionalContext.includes('src/**') && out.additionalContext.includes('P-1: events are never renamed') && out.additionalContext.includes('no data access here'), out.additionalContext);
+    assert.ok(!('permissionDecision' in out), 'context never decides');
+    r = await run(GUARD, { input: edit(d, 'src/x.py'), cwd: d });
+    assertAllowed(r);   // the same session saw it: silent
+    r = await run(GUARD, { input: JSON.stringify({ ...JSON.parse(edit(d, 'src/y.py')), session_id: 'other' }), cwd: d });
+    assert.ok(JSON.parse(r.stdout).hookSpecificOutput.additionalContext.includes('P-1'), 'another session sees it once too');
+    assert.equal(events(d).filter((e) => e.kind === 'principle_injected').length, 2);
+    writeFileSync(join(d, 'README.md'), 'a\n');
+    assertAllowed(await run(GUARD, { input: edit(d, 'README.md'), cwd: d }));   // no entry, no invariants
+    assertBlocked(await run(GUARD, { input: edit(d, 'billing/x.py'), cwd: d }), 'billing/x.py');
+  });
+});
+
 describe('guard: one writer per area (A4.2)', () => {
   const as = (id) => ({ agent_type: 'devanity:implementer', agent_id: id });
   const child = (d, fields) => ledger.append(d, 'contracts', { id: 'C-1', phase: 'EXECUTE', parent: 'C-0', agent: 'a1', scope: 'src/**', intent: 'retries', ...fields }, 's1');
