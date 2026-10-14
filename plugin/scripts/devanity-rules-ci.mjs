@@ -33,6 +33,7 @@ import { spawnSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import { measureEntropy, renderEntropy, worseParts } from './entropy.mjs';
 import { compare, gitIgnored, gitRun, surfacesOf } from './surfaces.mjs';
 
 const args = process.argv.slice(2);
@@ -193,6 +194,22 @@ if (base && rulesMod && !loaded.errors.length) {
     if (g.delta.lines !== undefined && g.lines > g.delta.lines) fail(`delta budget exceeded for ${glob}: ${g.lines} lines added, budget ${g.delta.lines}`);
   }
 
+  // entropy (A3.2): reported for every change; a glob with `delta.entropy: ratchet` fails when the
+  // files touched under it got worse (A3.3). A measurement that cannot be made is said, never scored.
+  if (files.length) {
+    try {
+      const from = fromRev(base);
+      note(renderEntropy(measureEntropy(root, from, 'HEAD')));
+      for (const p of rules.paths) {
+        if (!p.rule.delta || p.rule.delta.entropy !== 'ratchet') continue;
+        const under = touched.filter((t) => p.re.test(t.path)).map((t) => t.path);
+        if (!under.length) continue;
+        const e = measureEntropy(root, from, 'HEAD', under);
+        if (e.worse) fail(`entropy ratchet: ${p.glob} got worse (${worseParts(e)})`);
+      }
+    } catch (e) { note(`entropy: not measured (${e.message})`); }
+  }
+
   // the map stays alive: every declared path matches a tracked file
   const tracked = git('ls-files').out.split('\n').filter(Boolean);
   for (const p of rules.paths) if (!tracked.some((f) => p.re.test(f))) fail(`devanity.rules.json: ${p.glob} matches no tracked file (a map entry for a path that is gone)`);
@@ -283,7 +300,7 @@ if (base && rulesMod && !loaded.errors.length) {
     const out = ['## What was at stake', ''];
     for (const [glob, { rule: r, files: fs }] of stakes) {
       out.push(`- ${md(glob)} (${r.tier}${r.core ? ', core' : ''}): ${fs.length} file(s)${r.purpose ? ` — ${md(r.purpose)}` : ''}`);
-      for (const inv of r.invariants || []) out.push(`  - never changes: ${md(inv)}`);
+      for (const inv of r.invariants || []) out.push(`  - never changes: ${md(rulesMod.invariantText(inv))}`);
       if (r.tier !== 'high-risk') continue;
       const why = [];
       if (!r.check) why.push('no declared check');

@@ -89,6 +89,7 @@ function validate(raw) {
       if (raw.defaults.tier === 'trivial') bad('defaults: tier trivial covers instruction files (CLAUDE.md); an instruction file is never trivial');
     }
   }
+  const principleIds = new Map();
   if (raw.paths !== undefined) {
     if (typeof raw.paths !== 'object' || Array.isArray(raw.paths)) bad('paths must be an object of glob → rule');
     else for (const [glob, rule] of Object.entries(raw.paths)) {
@@ -106,12 +107,39 @@ function validate(raw) {
       if (rule.check !== undefined && (typeof rule.check !== 'string' || !rule.check.trim())) bad(`paths["${glob}"].check must be a non-empty string`);
       // The map: what the path is, and what never changes there.
       if (rule.purpose !== undefined && !(typeof rule.purpose === 'string' && rule.purpose.trim() && rule.purpose.length <= PURPOSE_MAX)) bad(`paths["${glob}"].purpose must be a non-empty string of at most ${PURPOSE_MAX} characters`);
-      if (rule.invariants !== undefined && !(Array.isArray(rule.invariants) && rule.invariants.every((v) => typeof v === 'string' && v.trim()))) bad(`paths["${glob}"].invariants must be an array of non-empty strings`);
+      if (rule.invariants !== undefined) {
+        if (!Array.isArray(rule.invariants)) bad(`paths["${glob}"].invariants must be an array of non-empty strings or principle objects`);
+        else rule.invariants.forEach((v, i) => {
+          if (typeof v === 'string') { if (!v.trim()) bad(`paths["${glob}"].invariants[${i}] must be a non-empty string`); return; }
+          // A principle (A2.1): a rule with an id and a provenance, so a decision that recurs can
+          // be derived instead of asked again. `from` names the decisions it was induced from;
+          // `declared` marks one a human wrote directly. One id means one rule, map-wide.
+          if (!v || typeof v !== 'object' || Array.isArray(v)) { bad(`paths["${glob}"].invariants[${i}] must be a string or a principle object`); return; }
+          const where = `paths["${glob}"].invariants[${i}]`;
+          known(v, ['id', 'rule', 'kind', 'from', 'check', 'declared'], where);
+          if (!(typeof v.id === 'string' && /^\S+$/.test(v.id))) bad(`${where}.id must be a non-empty token`);
+          if (!(typeof v.rule === 'string' && v.rule.trim())) bad(`${where}.rule must be a non-empty string`);
+          if (v.kind !== undefined && !(typeof v.kind === 'string' && v.kind.trim())) bad(`${where}.kind must be a non-empty string`);
+          if (v.check !== undefined && !(typeof v.check === 'string' && v.check.trim())) bad(`${where}.check must be a non-empty string`);
+          if (v.declared !== undefined && typeof v.declared !== 'boolean') bad(`${where}.declared must be true or false`);
+          const derived = Array.isArray(v.from) && v.from.length > 0 && v.from.every((f) => typeof f === 'string' && f.trim());
+          if (v.from !== undefined && !derived) bad(`${where}.from must be a non-empty array of decision ids`);
+          if (!derived && v.declared !== true) bad(`${where}: a principle names the decisions it comes from (from: [...]) or is declared: true`);
+          if (typeof v.id === 'string') {
+            const seen = principleIds.get(v.id);
+            if (seen) bad(`principle ${v.id} is declared twice (${seen} and ${where}); one id, one rule, one place`);
+            else principleIds.set(v.id, where);
+          }
+        });
+      }
       if (rule.core !== undefined && typeof rule.core !== 'boolean') bad(`paths["${glob}"].core must be true or false`);
       if (rule.delta !== undefined && (!rule.delta || typeof rule.delta !== 'object' || Array.isArray(rule.delta))) bad(`paths["${glob}"].delta must be an object {files?, lines?}`);
       else if (rule.delta !== undefined) {
-        known(rule.delta, ['files', 'lines'], `paths["${glob}"].delta`);
+        known(rule.delta, ['files', 'lines', 'entropy'], `paths["${glob}"].delta`);
         for (const k of ['files', 'lines']) if (rule.delta[k] !== undefined && !(Number.isInteger(rule.delta[k]) && rule.delta[k] >= 1)) bad(`paths["${glob}"].delta.${k} must be an integer >= 1`);
+        // The entropy ratchet (A3.3): the reference CI job fails a change that leaves this glob with
+        // more duplication, suppressions or casts than its base had. Opt-in, one value.
+        if (rule.delta.entropy !== undefined && rule.delta.entropy !== 'ratchet') bad(`paths["${glob}"].delta.entropy must be "ratchet"`);
       }
     }
   }
@@ -181,6 +209,11 @@ function ruleFor(rules, rel) {
     if (!best || p.spec > best.spec || (p.spec === best.spec && p.order > best.order)) best = p;
   }
   return { tier: rules.defaults.tier, ...(best ? best.rule : {}), glob: best ? best.glob : null };
+}
+
+// An invariant as the model and the human read it: a string as written, a principle as `id: rule`.
+function invariantText(inv) {
+  return inv && typeof inv === 'object' ? `${inv.id}: ${inv.rule}` : String(inv);
 }
 
 function isTestPath(rules, rel) {
@@ -580,5 +613,5 @@ function commandAuthority(rules, command) {
 
 module.exports = {
   AUTHORITIES, AUTONOMY_AUTHORITIES, FILE, TIERS,
-  authorityRank, commandAuthority, copyTargets, globToRegExp, isTestPath, loadRules, parseRules, relPath, ruleFor, shellCommands, validate,
+  authorityRank, commandAuthority, copyTargets, globToRegExp, invariantText, isTestPath, loadRules, parseRules, relPath, ruleFor, shellCommands, validate,
 };

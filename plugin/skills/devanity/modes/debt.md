@@ -24,6 +24,7 @@ A signal that recurs becomes structure. Cite the records behind every count; nev
 | `would_block` stable over the window, each one matched by a later human decision on its path (no false block) | enforcement on: a valid map, or `DEVANITY_GUARDS=on` |
 | `blocked` repeated on one class of task | a contract field that class carries from FRAME (the path under `forbidden`, the decision asked up front) |
 | a `deferred:` aging in a top hotspot | a prioritized finding |
+| `stats.principles`: three or more human decisions of one kind under one map area | lane b: a principle for that area, rendered as the `invariants` patch (`{id, rule, kind, from: <the decisions>}`) under a `[DECIDE][rule]`; a principle whose `check` never fired in the ledger is a finding |
 
 Every promotion takes exactly one lane:
 
@@ -58,6 +59,7 @@ src/api/search.ts:14 — linear scan over every document. ceiling: O(n) per quer
 b · unmeasured 3× on src/sync/** (`unmeasured` events beside the proofs of C-2026-08-02-1, C-2026-08-19-2, C-2026-09-10-1, each `reason: no declared check`; paths under src/sync/)
 - **[DECIDE][blocking][G-002][trade] Declare `npm test -- src/sync` as the check of `src/sync/**`?**
   - decision: whether sync proofs are measured by a declared check, at the cost of a block when it fails.
+  - derivation: tried the map: `src/sync/**` declares no `check`, so nothing decides it.
   - context: three `VERIFIED` claims nothing could measure; the command is the CI test step narrowed to the path.
   - options: declare → the map entry is proposed for its PR · defer → dormant, worth doing at the next unmeasured claim.
   - recommendation: declare; unmeasured claims repeating on one path are what a declared check is for.

@@ -67,6 +67,20 @@ describe('rules CI', () => {
     assert.equal(r.code, 0, r.out); assert.match(r.out, /docs\/b\.md: tier trivial/);
   });
 
+  test('entropy is reported for every change, and a `delta.entropy: ratchet` glob fails the job when it got worse (A3.2, A3.3)', () => {
+    const block = ['const a = read(x);', 'if (!a) {', '  return fail(1);', '}', 'const b = parse(a);', 'return b.value;'].join('\n');
+    const dupe = { 'billing/a.js': `${block}\n`, 'billing/b.js': `${block}\n` };
+    let d = seed({ rules: { version: 1, paths: { 'billing/**': { tier: 'normal' } } }, changes: dupe });
+    let r = runCi(d, ['--base', 'main', '--no-proof-required']);
+    assert.equal(r.code, 0, r.out); assert.match(r.out, /entropy \S+\.\.HEAD: .*duplication 0 → 4 \(\+4\)/, r.out);
+    d = seed({ rules: { version: 1, paths: { 'billing/**': { tier: 'normal', delta: { entropy: 'ratchet' } } } }, changes: dupe });
+    r = runCi(d, ['--base', 'main', '--no-proof-required']);
+    assert.equal(r.code, 1, r.out); assert.match(r.out, /entropy ratchet: billing\/\*\* got worse \(duplication \+4\)/, r.out);
+    d = seed({ rules: { version: 1, paths: { 'billing/**': { tier: 'normal', delta: { entropy: 'ratchet' } } } }, changes: { 'billing/a.js': 'const a = 1;\n' } });
+    r = runCi(d, ['--base', 'main', '--no-proof-required']);
+    assert.equal(r.code, 0, r.out);
+  });
+
   test('the check of a touched high-risk path runs (once per distinct command) and its failure fails the job', () => {
     // the check must reference this repo's own marker path, so the rules are written after seeding
     let d = seed({ rules: { version: 1 }, changes: {} });

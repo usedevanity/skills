@@ -13,6 +13,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const HOTSPOTS = join(root, 'plugin', 'scripts', 'hotspots.mjs');
 const CALIBRATE = join(root, 'plugin', 'scripts', 'calibrate.mjs');
 const SURFACES = join(root, 'plugin', 'scripts', 'surfaces.mjs');
+const ENTROPY = join(root, 'plugin', 'scripts', 'entropy.mjs');
 
 let temp;
 before(() => { temp = mkdtempSync(join(tmpdir(), 'devanity-scripts-')); });
@@ -222,4 +223,26 @@ test('surfaces: run through a symlinked path it still reports (an install path m
   const r = run(join(link, 'surfaces.mjs'), ['--json'], { cwd: d });
   assert.equal(r.code, 0, r.err);
   assert.deepEqual(JSON.parse(r.out).unresolved.map((u) => u.target), ['src/gone.js']);
+});
+
+test('entropy: duplication by 5-line window, new suppressions and new casts between two revisions, over the changed text files only (A3.2)', () => {
+  const d = join(temp, `e${++n}`); mkdirSync(d); git(d, 'init', '-q', '-b', 'main');
+  const block = ['const a = read(x);', 'if (!a) {', '  return fail(1);', '}', 'const b = parse(a);', 'return b.value;'].join('\n');
+  // a Latin-1 text file (not UTF-8, no NUL) and a path with a newline sort before the changed file: neither may shift the batch parse
+  commit(d, { 'README': Buffer.from([0x63, 0x61, 0x66, 0xe9, 0x0a]), 'a\nb.js': 'const q = 1;\n', 'src/a.js': `${block}\nexport default 1;\n`, 'src/c.js': 'const c = 3;\n' }, 'base');
+  commit(d, { 'src/b.js': `function g() {\n${block}\n}\n// eslint-disable-next-line no-console\nconsole.log(x as any);\n`, 'bin.dat': Buffer.from([0, 1, 2, 0, 3]), 'src/c.js': 'const c = 3;\n' }, 'change');
+  let r = run(ENTROPY, ['--base', 'HEAD~1', '--json'], { cwd: d });
+  assert.equal(r.code, 0, r.err);
+  const j = JSON.parse(r.out);
+  // b.js is the one changed text file (bin.dat is binary, c.js unchanged); its two 5-line windows both exist in a.js, so it carries 2 copied windows; before the change it did not exist
+  assert.deepEqual({ files: j.files, dup: j.duplication, sup: j.suppressions, casts: j.casts, worse: j.worse }, { files: 1, dup: { before: 0, after: 2, delta: 2 }, sup: { before: 0, after: 1, delta: 1 }, casts: { before: 0, after: 1, delta: 1 }, worse: true });
+  r = run(ENTROPY, ['--base', 'HEAD~1'], { cwd: d });
+  assert.match(r.out, /entropy HEAD~1\.\.HEAD: 1 file · duplication 0 → 2 \(\+2\) · suppressions 0 → 1 \(\+1\) · casts 0 → 1 \(\+1\)/, r.out);
+  commit(d, { 'src/b.js': 'function g() { return 1; }\n' }, 'cleanup');
+  r = run(ENTROPY, ['--base', 'HEAD~1', '--json'], { cwd: d });
+  assert.deepEqual(JSON.parse(r.out).duplication, { before: 2, after: 0, delta: -2 });
+  assert.equal(JSON.parse(r.out).worse, false);
+  r = run(ENTROPY, ['--base', 'HEAD~2', '--json', '--', 'src/c.js'], { cwd: d });
+  assert.equal(JSON.parse(r.out).files, 0, 'a scope narrows the set to what changed under it');
+  assert.equal(run(ENTROPY, ['--bogus'], { cwd: d }).code, 1);
 });

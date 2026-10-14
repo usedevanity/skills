@@ -88,8 +88,11 @@ Type, as a whole message in the Claude Code prompt:
 
 ```
 /devanity decide <id> <option> [--path <glob>]
+/devanity decide <id> <option>, <id> <option> [--path <glob>]
 /devanity pending
 ```
+
+Several answers in one message (A2.3) record one decision each; the `--path` applies to all of them. A comma that ends a word starts a new answer only when a decision id is the next word (`G-1 no, prorate` stays one answer; so does `G-1 a,G-2 b`: no space after the comma).
 
 - `decide` appends `{id, status: decided, by: human, chosen, path, contract?}` to `decisions.jsonl`. For an id that is not yet in the ledger, `--path` is mandatory: a human decision must name what it authorizes. For a pending id (queued by an autonomous session) the path is inherited.
 - An answer whose first word is `no`, `n`, `nope`, `reject`, `deny`, `decline`, `refuse`, `não`, `rejeitar`, `negado` or `recuso` (trailing punctuation ignored; also `no way`, `not now`, `don't`) records `status: rejected`: it answers the pending question and authorizes nothing (`DEVANITY DECISION REJECTED: … stay blocked`).
@@ -206,7 +209,7 @@ Map (high-risk: rung 4, propose and stop; core: rung 5, its invariants survive p
 - `src/ui/**` normal: React views; no data access here
 ```
 
-This is the **repository map** (SPEC §0.4): one line per path that declares a `purpose`, `invariants`, `core` or the high-risk tier, high-risk first, then core. Hard cap: 1,600 characters (about 400 tokens). The fixed lines always fit; entries are added whole while they fit, and the rest is named (`… N more path(s) in devanity.rules.json`), never cut mid-line. No rules file, or an invalid one, adds nothing.
+This is the **repository map** (SPEC §0.4): one line per path that declares a `purpose`, `invariants`, `core` or the high-risk tier, high-risk first, then core. An invariant is a string, or a **principle** (A2.1): `{id, rule, kind?, from: [decision ids] | declared: true, check?}`, rendered as `id: rule` wherever invariants appear (the map, a guard block, the pending list); the loader refuses a principle with neither provenance, and one id with two rules. Hard cap: 1,600 characters (about 400 tokens). The fixed lines always fit; entries are added whole while they fit, and the rest is named (`… N more path(s) in devanity.rules.json`), never cut mid-line. No rules file, or an invalid one, adds nothing.
 
 ## Reference CI job (`plugin/scripts/devanity-rules-ci.mjs`)
 
@@ -241,7 +244,7 @@ This repository's own rules (`devanity.rules.json`) are its map: `plugin/hooks/*
 |---|---|---|
 | `contracts.jsonl` | `Stop` (a `devanity-contract:` block); `/devanity reset` | `{id, phase, intent?, scope?, forbidden?, proof?, pending?, reason?}`; the latest record per id wins field by field |
 | `decisions.jsonl` | `PreToolUse` guard and the `Stop` hook for a blocking `[DECIDE]` block (both `by: agent`, `status: pending`); `/devanity decide` (the only hook that writes `by: human`) | `{id, path?, kind, status: pending\|decided\|rejected, by, chosen?, contract?, question?, options?, recommendation?, if_undecided?}`; latest per id wins, field by field, so an answer keeps its question |
-| `proofs.jsonl` | `Stop` oracle | `{kind: 'proof', contract, check, agent_check, head, failed_before, passed_after, status, agent_status, probes, pending, measured, reason}` |
+| `proofs.jsonl` | `Stop` oracle | `{kind: 'proof', contract, check, agent_check, head, failed_before, passed_after, status, agent_status, probes, pending, measured, reason}`. Every proof record also carries the cost of the change (A3.1): `files`, `lines` (added plus deleted) and the distinct map `areas` the diff touched, with `unmapped` for paths under no map entry; `stats` reports the medians over the latest proof per change. |
 | `events.jsonl` | guard, oracle, inject | `{kind: blocked \| would_block \| false_ready \| unmeasured \| rules_invalid \| guard_payload_missing \| guard_error \| oracle_error \| inject_truncated, …}` |
 
 ### The open change (`devanity-contract:`)

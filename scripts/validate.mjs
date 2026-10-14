@@ -49,7 +49,7 @@ const estimateTokens = (s) => {
 // counts stayed green throughout. The honest mechanism is a ratchet, not a cap: the budget sits at
 // the last deliberate size, and the PR that grows the skill raises it in the same diff — growth
 // stays possible and stops being free. Lowering it after a trim is the same deliberate act.
-export const SKILL_TOTAL_BUDGETS = { devanity: 132500 }; // bytes, every file under skills/<name>/: 105176 after the C1 rewrite (205345 with the moved subtrees before it); 114485 after phase V3/V4 (docs merged into audit and improve, the §0.6 fixes, the outer loop in init, audit, debt and improve: +9% over 104907); 124139 after the V acceptance-review fixes (init report template and CI toolchain, the instruction-scope audit example, missing-home improve, debt's unmeasured lane: +7% over 116139); 128574 after A0.4 (the measured subagent facts in reference/claude-code.md: +0.5% over 127898), +3% headroom
+export const SKILL_TOTAL_BUDGETS = { devanity: 136600 }; // bytes, every file under skills/<name>/: 105176 after the C1 rewrite (205345 with the moved subtrees before it); 114485 after phase V3/V4 (docs merged into audit and improve, the §0.6 fixes, the outer loop in init, audit, debt and improve: +9% over 104907); 124139 after the V acceptance-review fixes (init report template and CI toolchain, the instruction-scope audit example, missing-home improve, debt's unmeasured lane: +7% over 116139); 128574 after A0.4 (the measured subagent facts in reference/claude-code.md: +0.5% over 127898); 132650 after A2/A3 (principles and the entropy ratchet in rules.schema.json, the derivation line in the vocabulary and the five examples, debt's principle lane: +3.2% over 128574), +3% headroom
 export function checkSkillTotal(skillsDir, budgets) {
   const errors = [];
   const sizeOf = (d) => readdirSync(d).reduce((n, f) => {
@@ -143,6 +143,17 @@ export function validate(skillsDir) {
     for (const sub of ['reference', 'modes']) {
       const d = join(root, sub);
       if (existsSync(d)) for (const f of readdirSync(d)) if (f.endsWith('.md')) scanFiles.push(join(d, f));
+    }
+    // 2b. The decision grammar (A2.2): a blocking [DECIDE] states what was tried before asking. Every
+    // example the model will imitate carries the line, fenced or not; a dormant one-liner has no fields.
+    for (const file of scanFiles) {
+      const lines = readFileSync(file, 'utf8').split('\n');
+      lines.forEach((line, i) => {
+        if (!/^\s*-\s+\*\*\[DECIDE\]\[blocking\]/.test(line)) return;
+        let j = i + 1;
+        while (j < lines.length && /^\s+-\s+/.test(lines[j]) && !/^\s+-\s+\*\*\[DECIDE\]/.test(lines[j])) j++;
+        if (!lines.slice(i + 1, j).some((l) => /^\s+-\s+derivation:/.test(l))) err(skill, `${file.slice(root.length + 1)}:${i + 1} blocking [DECIDE] without a derivation line (the principle tried, and why it does not decide this)`);
+      });
     }
     for (const file of scanFiles) {
       const body = stripFences(readFileSync(file, 'utf8'));

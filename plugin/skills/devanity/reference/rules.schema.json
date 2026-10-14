@@ -50,6 +50,12 @@
               "lines": {
                 "type": "integer",
                 "minimum": 1
+              },
+              "entropy": {
+                "enum": [
+                  "ratchet"
+                ],
+                "description": "Opt-in (A3.3): the reference CI job fails a change that leaves this glob with more duplication (5-line windows seen elsewhere), suppressions or casts than its base had. Measured by plugin/scripts/entropy.mjs; reported for every change, enforced only here."
               }
             }
           },
@@ -62,10 +68,56 @@
           "invariants": {
             "type": "array",
             "items": {
-              "type": "string",
-              "minLength": 1
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "id",
+                    "rule"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^\\S+$",
+                      "description": "The principle's id (e.g. P-012), unique across the map: one id, one rule."
+                    },
+                    "rule": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "kind": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "What kind of rule: product, design, trade, acceptance, scope, …"
+                    },
+                    "from": {
+                      "type": "array",
+                      "minItems": 1,
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "description": "The decision ids this principle was induced from (the ledger's G-/D-/T-/I- ids)."
+                    },
+                    "check": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "The command that fails when the principle is broken, when one exists."
+                    },
+                    "declared": {
+                      "type": "boolean",
+                      "description": "true for a principle a human wrote directly, with no decision behind it."
+                    }
+                  }
+                }
+              ]
             },
-            "description": "What never changes under this path. Owners come from CODEOWNERS, never from here."
+            "description": "What never changes under this path. A string, or a principle object (A2.1): a rule with an id and a provenance (`from` decisions, or `declared: true`), so the next decision on the same axis is derived instead of asked. Owners come from CODEOWNERS, never from here."
           },
           "core": {
             "type": "boolean",

@@ -249,6 +249,33 @@ describe('a [DECIDE] block becomes a pending decision a human can answer later',
     assert.ok(!m.stdout.includes('y'.repeat(200)), 'each invariant is clipped');
   });
 
+  test('the derivation line is recorded and listed; a block without one lists `none given` (A2.2)', async () => {
+    const d = repo();
+    const withIt = decideBlock('G-010', 'Round refunds up?').replace('  - context:', '  - derivation: tried P-001 (amounts are integer cents); it says nothing about rounding\n  - context:');
+    await run(ORACLE, { input: stopPayload(d, withIt), cwd: d });
+    await run(ORACLE, { input: stopPayload(d, decideBlock('G-011', 'Which currencies?')), cwd: d });
+    const byId = Object.fromEntries(ledger.pendingDecisions(d).map((x) => [x.id, x]));
+    assert.ok(byId['G-010'].derivation.startsWith('tried P-001'), JSON.stringify(byId['G-010']));
+    assert.equal(byId['G-011'].derivation, undefined);
+    const m = await run(MODE, { input: prompt(d, '/devanity pending'), cwd: d });
+    assert.ok(m.stdout.includes('derivation: tried P-001') && m.stdout.includes('derivation: none given'), m.stdout);
+  });
+
+  test('several answers in one message: `id option, id option --path glob` records each by human, the path on all; a comma inside one answer is not a split (A2.3)', async () => {
+    const d = repo();
+    await run(ORACLE, { input: stopPayload(d, `${decideBlock('G-001', 'Refunds?')}\n\n${decideBlock('G-002', 'Currencies?', { options: 'usd only → simplest · full refund in 14 days → n/a · no-op → none' })}`), cwd: d });
+    const r = await run(MODE, { input: prompt(d, '/devanity decide G-001 prorate, G-002 full refund in 14 days --path billing/**'), cwd: d });
+    assert.ok(r.stdout.includes('G-001 = prorate') && r.stdout.includes('G-002 = full refund in 14 days'), r.stdout);
+    const byId = Object.fromEntries(ledger.decisions(d).map((x) => [x.id, x]));
+    for (const id of ['G-001', 'G-002']) { assert.equal(byId[id].status, 'decided'); assert.equal(byId[id].by, 'human'); assert.equal(byId[id].path, 'billing/**'); }
+    assert.equal(byId['G-002'].option, 'full refund in 14 days');
+    assert.equal(ledger.pendingDecisions(d).length, 0);
+    await run(ORACLE, { input: stopPayload(d, decideBlock('G-003', 'Rounding?')), cwd: d });
+    const one = await run(MODE, { input: prompt(d, '/devanity decide G-003 no, prorate'), cwd: d });
+    assert.ok(one.stdout.includes('REJECTED'), one.stdout);
+    assert.equal(ledger.decisions(d).find((x) => x.id === 'G-003').chosen, 'no, prorate');
+  });
+
   test('an answer given without --path says it authorizes no edit, and nothing else', async () => {
     const d = repo();
     await run(ORACLE, { input: stopPayload(d, decideBlock('G-001', 'Refunds?')), cwd: d });
@@ -435,10 +462,12 @@ describe('ledger CLI (F3.7)', () => {
       events: { blocked: 1, would_block: 2 },
       attention: { human_turns: 0, decide: 0, command: 0, message: 0, in_open_change: 0 },
       recommendation: { decided: 1, scored: 0, matched: 0, by_kind: {} },
+      principles: { candidates: [] },
+      cost: { changes: 0, median_files: null, median_lines: null, median_areas: null },
     });
     r = await run(LEDGER, { args: ['stats'], cwd: d });
     assert.equal(r.code, 0);
-    for (const topic of ['decisions', 'proofs', 'contracts', 'guards', 'attention', 'recommendation']) assert.match(r.stdout, new RegExp(`^${topic}: `, 'm'), `text form lacks the ${topic} line`);
+    for (const topic of ['decisions', 'proofs', 'contracts', 'guards', 'attention', 'recommendation', 'principles', 'cost']) assert.match(r.stdout, new RegExp(`^${topic}: `, 'm'), `text form lacks the ${topic} line`);
     r = await run(LEDGER, { args: ['stats', '--json'], cwd: fresh() });
     assert.equal(r.stdout.trim(), 'null');
     r = await run(LEDGER, { args: ['stats'], cwd: fresh() });
@@ -487,6 +516,48 @@ describe('never hang, never crash', () => {
     }
     const r = await run(INJECT, { input: sessionStart(d), args: ['SessionStart'], cwd: d });
     assert.ok(r.stdout.includes(CHANGE_HEADING), 'the torn line is skipped, the record before it still counts');
+  });
+});
+
+describe('principles in the map (A2.1)', () => {
+  test('a principle object renders as `id: rule` wherever an invariant is shown: the injected map and the guard block', async () => {
+    const d = repo();
+    writeFileSync(join(d, 'devanity.rules.json'), JSON.stringify({ version: 1, paths: { 'billing/**': { tier: 'high-risk', invariants: ['refunds never exceed the charge', { id: 'P-001', rule: 'amounts are integer cents', from: ['G-031'] }] } } }));
+    const ctx = await run(INJECT, { input: sessionStart(d), args: ['SessionStart'], cwd: d });
+    assert.ok(ctx.stdout.includes('P-001: amounts are integer cents') && !ctx.stdout.includes('[object'), ctx.stdout);
+    mkdirSync(join(d, 'billing'), { recursive: true });
+    const g = await run(join(hooksDir, 'devanity-guard.js'), { input: JSON.stringify({ hook_event_name: 'PreToolUse', session_id: 's1', cwd: d, tool_name: 'Edit', tool_input: { file_path: join(d, 'billing', 'x.py') } }), cwd: d });
+    assert.equal(g.code, 2); assert.ok(g.stderr.includes('P-001: amounts are integer cents'), g.stderr);
+    const m = await run(MODE, { input: prompt(d, '/devanity pending'), cwd: d });
+    assert.ok(!m.stdout.includes('[object'), m.stdout);
+  });
+});
+
+describe('principle candidates (A2.4)', () => {
+  test('three or more human decisions of one kind under one map area are a candidate principle; fewer, mixed kinds or unmapped paths are not', () => {
+    const d = repo();
+    writeFileSync(join(d, 'devanity.rules.json'), JSON.stringify({ version: 1, paths: { 'billing/**': { tier: 'high-risk' }, 'src/api/**': { tier: 'normal' } } }));
+    const dec = (id, kind, path, extra = {}) => ledger.append(d, 'decisions', { id, status: 'decided', by: 'human', decide_kind: kind, path, chosen: 'a', ...extra });
+    dec('G-1', 'rule', 'billing/a.py'); dec('G-2', 'rule', 'billing/b.py'); dec('G-3', 'rule', 'billing/sub/c.py');
+    dec('G-4', 'scope', 'billing/d.py'); dec('G-5', 'scope', 'billing/e.py');            // two: below the line
+    dec('G-6', 'rule', 'src/api/x.ts'); dec('G-7', 'rule', 'src/api/y.ts'); dec('G-8', 'rule', 'src/api/z.ts', { by: 'agent-default' });   // one is not human
+    dec('G-9', 'rule', 'elsewhere/x'); dec('G-10', 'rule', 'elsewhere/y'); dec('G-11', 'rule', 'elsewhere/z');   // no map area
+    const s = ledger.stats(d);
+    assert.deepEqual(s.principles, { candidates: [{ area: 'billing/**', kind: 'rule', decisions: ['G-1', 'G-2', 'G-3'] }] });
+    const r = spawnSync(process.execPath, [LEDGER, 'stats'], { cwd: d, encoding: 'utf8' });
+    assert.match(r.stdout, /^principles: 1 candidate · billing\/\*\* rule ×3 \(G-1, G-2, G-3\)$/m, r.stdout);
+  });
+
+  test('inside a git worktree the map read is the worktree\'s, as every other hook reads it (the ledger stays the shared one)', () => {
+    const d = repo();
+    writeFileSync(join(d, 'devanity.rules.json'), JSON.stringify({ version: 1, paths: { 'billing/**': { tier: 'high-risk' } } }));
+    git(d, 'add', '.'); git(d, '-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', 'map');
+    const wt = fresh('wt'); rmSync(wt, { recursive: true, force: true });
+    git(d, 'worktree', 'add', '-q', wt);
+    writeFileSync(join(wt, 'devanity.rules.json'), JSON.stringify({ version: 1, paths: { 'src/api/**': { tier: 'normal' } } }));
+    for (const [id, p] of [['G-1', 'billing/a.py'], ['G-2', 'billing/b.py'], ['G-3', 'billing/c.py'], ['G-4', 'src/api/x.ts'], ['G-5', 'src/api/y.ts'], ['G-6', 'src/api/z.ts']]) ledger.append(wt, 'decisions', { id, status: 'decided', by: 'human', decide_kind: 'rule', path: p, chosen: 'a' });
+    assert.deepEqual(ledger.stats(wt).principles.candidates.map((c) => c.area), ['src/api/**']);
+    assert.deepEqual(ledger.stats(d).principles.candidates.map((c) => c.area), ['billing/**'], 'the main checkout still reads its own map');
   });
 });
 

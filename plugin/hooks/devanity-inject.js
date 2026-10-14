@@ -43,7 +43,7 @@ function rulesContext(cwd) {
   // high-risk tier, or core), so the agent knows where it is before it opens a file. The fixed lines
   // come first; entries are added whole while they fit, and the rest is named, never cut mid-line.
   const entry = (p) => {
-    const parts = [p.rule.purpose, p.rule.invariants && p.rule.invariants.length ? `invariants: ${p.rule.invariants.join('; ')}` : '', p.rule.check ? `check: ${p.rule.check}` : ''].filter(Boolean);
+    const parts = [p.rule.purpose, p.rule.invariants && p.rule.invariants.length ? `invariants: ${p.rule.invariants.map(rulesMod.invariantText).join('; ')}` : '', p.rule.check ? `check: ${p.rule.check}` : ''].filter(Boolean);
     return `- \`${p.glob}\` ${p.rule.tier || r.defaults.tier}${p.rule.core ? ' core' : ''}${parts.length ? `: ${parts.join('; ')}` : ''}`;
   };
   const rank = (p) => (p.rule.tier === 'high-risk' ? 2 : 0) + (p.rule.core ? 1 : 0);   // high-risk, then core: the entries never to miss

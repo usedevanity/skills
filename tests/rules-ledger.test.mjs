@@ -99,6 +99,38 @@ describe('rules: the repository map (SPEC §0.4)', () => {
     }
   });
 
+  test('an invariant may be a principle object {id, rule, kind?, from|declared, check?}; ids are unique across the map (A2.1)', () => {
+    const P = { id: 'P-001', rule: 'amounts are integer cents', kind: 'product', from: ['G-031'], check: 'npm test -- money' };
+    const ok = { version: 1, paths: { 'billing/**': { tier: 'high-risk', invariants: ['refunds never exceed the charge', P] }, 'ledger/**': { invariants: [{ id: 'P-002', rule: 'entries are append-only', declared: true }] } } };
+    assert.deepEqual(rules.validate(ok), []);
+    const loaded = rules.parseRules(JSON.stringify(ok)).rules;
+    assert.deepEqual(rules.ruleFor(loaded, 'billing/x.py').invariants[1], P, 'the object is kept as written');
+    assert.equal(rules.invariantText(P), 'P-001: amounts are integer cents');
+    assert.equal(rules.invariantText('plain'), 'plain');
+    for (const [bad, what] of [
+      [{ 'a/**': { invariants: [{ id: 'P-1', rule: 'x' }] } }, 'from'],                       // neither derived nor declared
+      [{ 'a/**': { invariants: [{ id: 'P-1', rule: 'x', from: [] }] } }, 'from'],
+      [{ 'a/**': { invariants: [{ id: 'P-1', from: ['G-1'] }] } }, 'rule'],
+      [{ 'a/**': { invariants: [{ rule: 'x', from: ['G-1'] }] } }, 'id'],
+      [{ 'a/**': { invariants: [{ id: 'P-1', rule: 'x', from: ['G-1'], extra: 1 }] } }, 'extra'],
+      [{ 'a/**': { invariants: [{ id: 'P-1', rule: 'x', declared: true }] }, 'b/**': { invariants: [{ id: 'P-1', rule: 'y', declared: true }] } }, 'P-1'],   // one id, two rules
+      [{ 'a/**': { invariants: [{ id: 'P-1', rule: 'x', declared: true }, { id: 'P-1', rule: 'x', declared: true }] } }, 'P-1'],
+    ]) {
+      const errors = rules.validate({ version: 1, paths: bad });
+      assert.ok(errors.some((e) => e.includes(what)), `${JSON.stringify(bad)} -> ${errors.join('; ')}`);
+    }
+    const schema = JSON.parse(readFileSync(join(root, 'plugin', 'skills', 'devanity', 'reference', 'rules.schema.json'), 'utf8'));
+    const items = schema.properties.paths.additionalProperties.properties.invariants.items;
+    assert.ok(Array.isArray(items.anyOf) && items.anyOf.some((t) => t.type === 'object' && t.required.includes('id') && t.required.includes('rule')), 'the published schema accepts the object form');
+  });
+
+  test('delta.entropy accepts only `ratchet` (A3.3)', () => {
+    assert.deepEqual(rules.validate({ version: 1, paths: { 'a/**': { delta: { entropy: 'ratchet' } } } }), []);
+    assert.ok(rules.validate({ version: 1, paths: { 'a/**': { delta: { entropy: 'strict' } } } }).some((e) => e.includes('entropy')));
+    const schema = JSON.parse(readFileSync(join(root, 'plugin', 'skills', 'devanity', 'reference', 'rules.schema.json'), 'utf8'));
+    assert.deepEqual(schema.properties.paths.additionalProperties.properties.delta.properties.entropy.enum, ['ratchet']);
+  });
+
   test('a path may be declared core: a boolean, orthogonal to its tier', () => {
     const ok = { version: 1, paths: { 'core/events.py': { tier: 'normal', core: true, invariants: ['fields are never renamed'] } } };
     assert.deepEqual(rules.validate(ok), []);
