@@ -429,10 +429,12 @@ describe('ledger CLI (F3.7)', () => {
       proofs: { verified: 1, not_verified: 2, false_ready: 1 },
       contracts: { open: 1, done: 1, abandoned: 1, expired: 1 },
       events: { blocked: 1, would_block: 2 },
+      attention: { human_turns: 0, decide: 0, command: 0, message: 0, in_open_change: 0 },
+      recommendation: { decided: 1, scored: 0, matched: 0, by_kind: {} },
     });
     r = await run(LEDGER, { args: ['stats'], cwd: d });
     assert.equal(r.code, 0);
-    for (const topic of ['decisions', 'proofs', 'contracts', 'guards']) assert.match(r.stdout, new RegExp(`^${topic}: `, 'm'), `text form lacks the ${topic} line`);
+    for (const topic of ['decisions', 'proofs', 'contracts', 'guards', 'attention', 'recommendation']) assert.match(r.stdout, new RegExp(`^${topic}: `, 'm'), `text form lacks the ${topic} line`);
     r = await run(LEDGER, { args: ['stats', '--json'], cwd: fresh() });
     assert.equal(r.stdout.trim(), 'null');
     r = await run(LEDGER, { args: ['stats'], cwd: fresh() });
@@ -481,5 +483,50 @@ describe('never hang, never crash', () => {
     }
     const r = await run(INJECT, { input: sessionStart(d), args: ['SessionStart'], cwd: d });
     assert.ok(r.stdout.includes(CHANGE_HEADING), 'the torn line is skipped, the record before it still counts');
+  });
+});
+
+describe('attention ledger (A0.1, A0.2)', () => {
+  test('every human prompt is one human_turn event: its type, size and the open change, never its text', async () => {
+    const d = repo();
+    seedContract(d, { id: 'C-1' });
+    await run(ORACLE, { input: stopPayload(d, decideBlock('G-001', 'Refunds?')), cwd: d });
+    await run(MODE, { input: prompt(d, 'please add retries to the uploader'), cwd: d });
+    await run(MODE, { input: prompt(d, '/devanity status'), cwd: d });
+    await run(MODE, { input: prompt(d, '/devanity decide G-001 prorate'), cwd: d });
+    await run(MODE, { input: prompt(d, '   '), cwd: d });
+    const turns = readKind(d, 'events').filter((e) => e.kind === 'human_turn');
+    assert.deepEqual(turns.map((t) => [t.type, t.contract, t.phase]), [['message', 'C-1', 'EXECUTE'], ['command', 'C-1', 'EXECUTE'], ['decide', 'C-1', 'EXECUTE']], JSON.stringify(turns));
+    assert.ok(turns.every((t) => t.chars > 0 && !JSON.stringify(t).includes('uploader')), 'the prompt text stays out of the ledger');
+    assert.equal(turns[2].decision, 'G-001');
+    const none = await run(MODE, { input: prompt(fresh(), 'hello'), cwd: fresh() });
+    assert.equal(none.code, 0, 'no ledger: nothing recorded, nothing thrown');
+    const s = ledger.stats(d);
+    assert.deepEqual(s.attention, { human_turns: 3, decide: 1, command: 1, message: 1, in_open_change: 3 });
+  });
+
+  test('a chosen answer is matched to a label the block offered, and the recommendation is scored against it', async () => {
+    const d = repo();
+    const opts = 'prorate by days used → partial refunds · full refund in 14 days → costlier · no-op → refunds stay manual';
+    ledger.append(d, 'decisions', { id: 'G-1', status: 'pending', by: 'agent', decide_kind: 'rule', options: opts, recommendation: 'prorate, it matches the billing invariant' });
+    ledger.append(d, 'decisions', { id: 'G-2', status: 'pending', by: 'agent', decide_kind: 'rule', options: opts, recommendation: 'prorate, same basis' });
+    ledger.append(d, 'decisions', { id: 'G-3', status: 'pending', by: 'agent', decide_kind: 'scope', options: 'absorb → one unit · split → its own change', recommendation: 'split: it is its own unit' });
+    ledger.append(d, 'decisions', { id: 'G-4', status: 'pending', by: 'agent', decide_kind: 'trade' });
+    ledger.append(d, 'decisions', { id: 'G-5', status: 'pending', by: 'agent', decide_kind: 'scope', options: 'full credit → a · full refund → b', recommendation: 'full credit' });
+    await run(MODE, { input: prompt(d, '/devanity decide G-1 Prorate it.'), cwd: d });
+    await run(MODE, { input: prompt(d, '/devanity decide G-2 full refund in 14 days'), cwd: d });
+    await run(MODE, { input: prompt(d, '/devanity decide G-3 no'), cwd: d });
+    await run(MODE, { input: prompt(d, '/devanity decide G-4 whatever'), cwd: d });
+    await run(MODE, { input: prompt(d, '/devanity decide G-5 full'), cwd: d });
+    const byId = Object.fromEntries(ledger.decisions(d).map((x) => [x.id, x]));
+    assert.equal(byId['G-1'].option, 'prorate by days used', 'first word of the answer matches a unique label');
+    assert.equal(byId['G-1'].chosen, 'Prorate it.', 'the answer is kept as typed');
+    assert.equal(byId['G-2'].option, 'full refund in 14 days', 'exact label');
+    assert.equal(byId['G-3'].option, undefined, 'a rejection is not a chosen option');
+    assert.equal(byId['G-4'].option, undefined, 'no options to match');
+    assert.equal(byId['G-5'].option, undefined, 'an ambiguous first word matches nothing');
+    assert.deepEqual(ledger.stats(d).recommendation, { decided: 4, scored: 2, matched: 1, by_kind: { rule: { scored: 2, matched: 1 } } });
+    const r = await run(LEDGER, { args: ['stats'], cwd: d });
+    assert.match(r.stdout, /^recommendation: 2 of 4 decided answers scored · 1 matched the recommendation \(rule 1\/2\)$/m, r.stdout);
   });
 });

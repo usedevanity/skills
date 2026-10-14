@@ -16,6 +16,10 @@ const hooksDir = join(root, 'plugin', 'hooks');
 const GUARD = join(hooksDir, 'devanity-guard.js');
 const MODE = join(hooksDir, 'devanity-mode.js');
 const ledger = require(join(hooksDir, 'devanity-ledger.js'));
+// The guard's real ceiling: the host kills a PreToolUse hook past this (plugin/hooks/hooks.json).
+// A time assertion that claims "inside the hook budget" measures against it, not a tighter guess:
+// the costliest hostile input below reads in ~0.9 s idle, and a quadratic reader would take minutes.
+const HOOK_BUDGET_MS = 1000 * JSON.parse(readFileSync(join(hooksDir, 'hooks.json'), 'utf8')).hooks.PreToolUse[0].hooks[0].timeout;
 
 const RULES = {
   version: 1,
@@ -442,7 +446,7 @@ describe('guard: the shell reader stays inside the hook budget', () => {
     ]) {
       const started = Date.now();
       assert.equal(rules.commandAuthority(loaded, cmd), need);
-      assert.ok(Date.now() - started < 1000, `${cmd.slice(0, 30)}…: ${Date.now() - started} ms`);
+      assert.ok(Date.now() - started < HOOK_BUDGET_MS, `${cmd.slice(0, 30)}…: ${Date.now() - started} ms`);
     }
   });
 });
@@ -453,7 +457,7 @@ describe('guard: a command naming many guarded paths', () => {
     const started = Date.now();
     const r = await run(GUARD, { input: bash(d, `rm ${Array.from({ length: 100000 }, (_, k) => `billing/f${k}.py`).join(' ')}`), cwd: d, timeoutMs: 15000 });
     assertBlocked(r, 'billing/f0.py', 'more');
-    assert.ok(Date.now() - started < 3000, `${Date.now() - started} ms`);
+    assert.ok(Date.now() - started < HOOK_BUDGET_MS, `${Date.now() - started} ms`);
   });
 
   test('300 high-risk paths block in about the time of one: the ledger is located once per run', async () => {
