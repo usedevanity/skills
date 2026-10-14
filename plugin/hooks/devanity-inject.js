@@ -76,15 +76,46 @@ function phaseLine(c) {
   return `${c.phase}: continue from ${c.phase}.`;
 }
 
+// The change to continue from (A4.2): the one the node itself declared, else the milestone (an open
+// change with no parent), else the most recently declared, as before composition.
+function pickChange(cwd, payload) {
+  const open = ledger.openContracts(cwd);
+  const own = payload.agent_id ? open.find((c) => c.agent === String(payload.agent_id)) : null;
+  return own || open.find((c) => !c.parent) || open[0] || null;
+}
+
+// The family of a change (A4.2): the other children of its parent (or its own children, for a
+// milestone): a done sibling with its intent and scope, so a node sees what already landed and
+// where; an open one as the area it holds (one writer per area). At most five, each line clipped.
+const FAMILY_MAX = 5;
+const FAMILY_MAX_CHARS = 300;
+function familyLines(cwd, c) {
+  const open = new Set(ledger.openContracts(cwd).map((x) => x.id));
+  const parent = c.parent || c.id;
+  const kin = ledger.contracts(cwd).filter((x) => x.parent === parent && x.id !== c.id);
+  const lines = [];
+  for (const k of kin) {
+    const phase = String(k.phase || '').toUpperCase();
+    if (phase === 'DONE') lines.push(`done: ${clip(k.id, 30)} (${clip(k.intent, 60)}; ${clip(k.scope, 60)})`);
+    else if (open.has(k.id)) lines.push(`open: ${clip(k.id, 30)} (${clip(k.scope, 60)})`);
+  }
+  const shown = lines.slice(0, FAMILY_MAX);
+  if (lines.length > FAMILY_MAX) shown.push(`… ${lines.length - FAMILY_MAX} more`);
+  const text = shown.join('\n');
+  return text.length > FAMILY_MAX_CHARS ? text.slice(0, FAMILY_MAX_CHARS - 1) + '…' : text;
+}
+
 // The "Open change" section for SessionStart and non-verifier subagents, or '' without one.
-function changeContext(cwd) {
-  const c = ledger.openContract(cwd);
+function changeContext(cwd, payload = {}) {
+  const c = pickChange(cwd, payload);
   if (!c) return '';
   const lines = [`## Open change ${clip(c.id)}`, `phase: ${c.phase} · pending: ${clip(c.pending) || '0'}`];
   for (const k of ['parent', 'intent', 'scope', 'forbidden', 'proof']) if (c[k]) lines.push(`${k}: ${clip(c[k])}`);
   lines.push(phaseLine(c));
   const text = lines.join('\n');
-  return text.length > CHANGE_CONTEXT_MAX_CHARS ? text.slice(0, CHANGE_CONTEXT_MAX_CHARS - 1) + '…' : text;
+  const own = text.length > CHANGE_CONTEXT_MAX_CHARS ? text.slice(0, CHANGE_CONTEXT_MAX_CHARS - 1) + '…' : text;
+  const family = familyLines(cwd, c);
+  return family ? `${own}\n${family}` : own;
 }
 
 // The queue an unattended session left: its own section, placed before the rules and
@@ -115,7 +146,7 @@ function contextFor(payload) {
   let rules = '';
   try { rules = rulesContext(cwd); } catch (e) { rules = ''; }
   let change = '';
-  try { change = changeContext(cwd); } catch (e) { change = ''; }
+  try { change = changeContext(cwd, payload); } catch (e) { change = ''; }
   let queue = '';
   try { queue = queueContext(cwd); } catch (e) { queue = ''; }
   const head = rt.isAutonomous() ? rt.AUTONOMOUS_LINE + '\n\n' : '';

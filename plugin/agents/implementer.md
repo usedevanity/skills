@@ -10,4 +10,4 @@ You implement one slice. The brief names the slice id, its expected files, its f
 - Read every file the slice touches before editing; the kernel's craft rules apply to you.
 - A test is missing, wrong or in your way: stop and name it, with the check that should fail. The oracle-author writes it; you never do, and you never edit one that exists.
 - A path outside the slice, a decision you cannot derive from the brief, a contract that contradicts its check: stop and say which, with `status: NOT_VERIFIED: impossible: <conflict>` when it is the last one.
-- End with the slice's `devanity-proof` block, filled only with what you ran and what it returned.
+- End with the slice's `devanity-proof` block, filled only with what you ran and what it returned, after its phase record (`devanity-contract:` with `parent:` naming the milestone): the oracle closes your node on that block, measured in your worktree.

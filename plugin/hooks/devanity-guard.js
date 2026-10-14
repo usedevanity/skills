@@ -197,6 +197,21 @@ function scopeMessage(tool, rel, ceiling, via) {
   ].join('\n');
 }
 
+// One writer per area (A4.2): an open child change (one with a `parent`) declared by a node holds
+// the paths its scope covers; any other writer, another node or the session itself, is blocked
+// there until it closes. No lock: the ledger's open contracts are the schedule.
+function heldBy(open, rel, agentId) {
+  return open.find((c) => c.parent && c.agent && c.agent !== agentId
+    && String(c.scope || '').split(/[,\s]+/).filter(Boolean).some((g) => rules.globCovers(g, rel))) || null;
+}
+function heldMessage(tool, rel, held, via) {
+  return [
+    header(tool, rel, via),
+    `  held: change ${held.id} (agent ${held.agent}) holds ${held.scope}: one writer per area, until it closes`,
+    `  Next step: wait for ${held.id} to reach DONE, replan through its parent ${held.parent}, or record the human decision with: ${DECIDE_HINT} ${suggestId(rel)} <option> --path ${rel}`,
+  ].join('\n');
+}
+
 // ---- evaluation -------------------------------------------------------------------------------
 
 // Returns null (allow) or {message, event, pending?}.
@@ -219,6 +234,7 @@ function evaluate(payload, env) {
   const auth = sessionAuthority(loaded, env);
   const role = rt.agentRole(payload.agent_type);
   const ceiling = approvedScope(root);
+  const open = ledger.openContracts(root);   // read once: a command naming many paths asks for each
   const findings = [];
 
   const checkPath = (target, via) => {
@@ -230,6 +246,8 @@ function evaluate(payload, env) {
     if ((role === 'implementer' && isTest) || (role === 'oracle-author' && !isTest)) {
       findings.push({ message: roleMessage(tool, rel, role, via), event: { tool, path: rel, role }, pending: queued });
     }
+    const held = heldBy(open, rel, payload.agent_id ? String(payload.agent_id) : null);
+    if (held) findings.push({ message: heldMessage(tool, rel, held, via), event: { tool, path: rel, held: { contract: held.id, agent: held.agent, scope: held.scope } }, pending: queued });
     if (ceiling && !inApproved(ceiling, rel)) {
       findings.push({ message: scopeMessage(tool, rel, ceiling, via), event: { tool, path: rel, scope: { contract: ceiling.contract, approved: ceiling.approved } }, pending: queued });
     }
