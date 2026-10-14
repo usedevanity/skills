@@ -245,7 +245,18 @@ function stats(cwd, now = Date.now()) {
     attention: attention(events, open),
     recommendation: recommendation(dec),
     principles: principles(cwd, dec),
+    cost: cost(proofs),
   };
+}
+
+// What a change costs here (A3.1): the latest proof per contract carries the diff's files, lines
+// and map areas; the medians say what an intent costs in this repository.
+function cost(proofs) {
+  const last = new Map();
+  for (const p of proofs) if (p && typeof p.files === 'number') last.set(p.contract || 'adhoc', p);
+  const rows = [...last.values()];
+  const median = (xs) => { if (!xs.length) return null; const s = [...xs].sort((a, b) => a - b); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+  return { changes: rows.length, median_files: median(rows.map((r) => r.files)), median_lines: median(rows.map((r) => r.lines)), median_areas: median(rows.map((r) => (Array.isArray(r.areas) ? r.areas.length : 0))) };
 }
 
 // Principle candidates (A2.4): three or more human decisions of one kind under one map area are
@@ -309,6 +320,7 @@ function renderStats(s) {
     s.principles.candidates.length
       ? `principles: ${s.principles.candidates.length} candidate${s.principles.candidates.length > 1 ? 's' : ''} · ${s.principles.candidates.map((c) => `${c.area} ${c.kind} ×${c.decisions.length} (${c.decisions.join(', ')})`).join(' · ')}`
       : 'principles: no candidate',
+    s.cost.changes ? `cost: ${s.cost.changes} change${s.cost.changes > 1 ? 's' : ''} · median ${s.cost.median_files} files · ${s.cost.median_lines} lines · ${s.cost.median_areas} map areas` : 'cost: no measured change',
   ].join('\n');
 }
 

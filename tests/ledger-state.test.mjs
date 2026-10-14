@@ -463,10 +463,11 @@ describe('ledger CLI (F3.7)', () => {
       attention: { human_turns: 0, decide: 0, command: 0, message: 0, in_open_change: 0 },
       recommendation: { decided: 1, scored: 0, matched: 0, by_kind: {} },
       principles: { candidates: [] },
+      cost: { changes: 0, median_files: null, median_lines: null, median_areas: null },
     });
     r = await run(LEDGER, { args: ['stats'], cwd: d });
     assert.equal(r.code, 0);
-    for (const topic of ['decisions', 'proofs', 'contracts', 'guards', 'attention', 'recommendation', 'principles']) assert.match(r.stdout, new RegExp(`^${topic}: `, 'm'), `text form lacks the ${topic} line`);
+    for (const topic of ['decisions', 'proofs', 'contracts', 'guards', 'attention', 'recommendation', 'principles', 'cost']) assert.match(r.stdout, new RegExp(`^${topic}: `, 'm'), `text form lacks the ${topic} line`);
     r = await run(LEDGER, { args: ['stats', '--json'], cwd: fresh() });
     assert.equal(r.stdout.trim(), 'null');
     r = await run(LEDGER, { args: ['stats'], cwd: fresh() });

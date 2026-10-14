@@ -286,6 +286,28 @@ function runCheck(command, cwd, deadline) {
   }
 }
 
+// The cost of the change (A3.1): files, lines (added plus deleted; an untracked file counts its
+// lines) and the distinct map areas the diff touches. It rides on every proof record, honest or
+// measured, so `stats` can say what an intent costs in this repository.
+function changeCost(root, head, rules, paths) {
+  const lines = new Map();
+  if (head) {
+    const r = git(root, ['diff', '--numstat', '-z', '--no-renames', 'HEAD']);
+    if (r.status === 0) for (const rec of r.stdout.split('\0')) {
+      const m = /^([^\t]*)\t([^\t]*)\t([\s\S]+)$/.exec(rec);
+      if (m) lines.set(m[3], (m[1] === '-' ? 0 : parseInt(m[1], 10) || 0) + (m[2] === '-' ? 0 : parseInt(m[2], 10) || 0));
+    }
+  }
+  let total = 0; const areas = new Set(); let unmapped = 0;
+  for (const rel of paths) {
+    if (lines.has(rel)) total += lines.get(rel);
+    else { try { const t = fs.readFileSync(path.join(root, rel), 'utf8'); total += t.split('\n').length - (t.endsWith('\n') ? 1 : 0); } catch (e) { /* gone or unreadable: nothing to count */ } }
+    const glob = rulesMod.ruleFor(rules, rel).glob;
+    if (glob) areas.add(glob); else unmapped++;
+  }
+  return { files: paths.length, lines: total, areas: [...areas].sort(), unmapped };
+}
+
 // Tests that existed at HEAD are frozen (A1.1): the overlay lets a NEW test fail on HEAD, but an
 // OLD test edited (or deleted) to match the change is a contract question, not a proof. The
 // changed test paths present in HEAD, minus those a human decision already covers.
@@ -401,7 +423,8 @@ function decide(payload, env = process.env) {
   // A proof without a `contract` field links to the contract declared in the same message.
   const contractId = agent.contract || (contract ? contract.fields.id : null) || 'adhoc';
   // `probes` is the verifier's count (run/survived); the oracle records it and never measures it.
-  const base = { kind: 'proof', contract: contractId, check: null, agent_check: agent.check || null, head: info ? info.head : null, agent_status: agentStatus, probes: agent.probes || null, pending, enforce };
+  const paths = info ? changedPaths(root, info.head) : [];
+  const base = { kind: 'proof', contract: contractId, check: null, agent_check: agent.check || null, head: info ? info.head : null, agent_status: agentStatus, probes: agent.probes || null, pending, enforce, ...(info ? changeCost(root, info.head, loaded.rules, paths) : {}) };
 
   // An honest NOT_VERIFIED, or a status that claims nothing, needs no re-run. One of them asks:
   // `NOT_VERIFIED: impossible: <conflict>` says the obligation and the declared check contradict
@@ -419,7 +442,6 @@ function decide(payload, env = process.env) {
   // is recorded, never enforced: outside git there is no baseline and no ledger; with guards
   // recording there is no authority to block; with no declared check there is nothing the agent
   // could fix, so the claim is recorded as unmeasured and `debt` proposes declaring one.
-  const paths = info ? changedPaths(root, info.head) : [];
   const check = info ? ruleCheckFor(loaded.rules, paths) : null;
   if (!enforce || !info || !check) {
     const reason = !info ? REASONS.noBaseline : !check ? REASONS.noDeclaredCheck : null;

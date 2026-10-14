@@ -244,7 +244,7 @@ This repository's own rules (`devanity.rules.json`) are its map: `plugin/hooks/*
 |---|---|---|
 | `contracts.jsonl` | `Stop` (a `devanity-contract:` block); `/devanity reset` | `{id, phase, intent?, scope?, forbidden?, proof?, pending?, reason?}`; the latest record per id wins field by field |
 | `decisions.jsonl` | `PreToolUse` guard and the `Stop` hook for a blocking `[DECIDE]` block (both `by: agent`, `status: pending`); `/devanity decide` (the only hook that writes `by: human`) | `{id, path?, kind, status: pending\|decided\|rejected, by, chosen?, contract?, question?, options?, recommendation?, if_undecided?}`; latest per id wins, field by field, so an answer keeps its question |
-| `proofs.jsonl` | `Stop` oracle | `{kind: 'proof', contract, check, agent_check, head, failed_before, passed_after, status, agent_status, probes, pending, measured, reason}` |
+| `proofs.jsonl` | `Stop` oracle | `{kind: 'proof', contract, check, agent_check, head, failed_before, passed_after, status, agent_status, probes, pending, measured, reason}`. Every proof record also carries the cost of the change (A3.1): `files`, `lines` (added plus deleted) and the distinct map `areas` the diff touched, with `unmapped` for paths under no map entry; `stats` reports the medians over the latest proof per change. |
 | `events.jsonl` | guard, oracle, inject | `{kind: blocked \| would_block \| false_ready \| unmeasured \| rules_invalid \| guard_payload_missing \| guard_error \| oracle_error \| inject_truncated, …}` |
 
 ### The open change (`devanity-contract:`)

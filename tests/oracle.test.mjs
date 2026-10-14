@@ -77,6 +77,21 @@ function parseBlock(stdout) {
   return out.reason;
 }
 
+describe('oracle: the cost of the change rides on every proof (A3.1)', () => {
+  test('files, lines and map areas of the diff are recorded with the proof; stats gives the median per change', async () => {
+    const d = seedBuggyRepo('node --test mod.test.js');   // mod.js: 1 line replaced (+1 −1); mod.test.js: 1 new line
+    const r = await runHook(ORACLE, { input: stopPayload(d, claimVerified('node --test mod.test.js')), env: baseEnv(), cwd: d });
+    assert.equal(r.code, 0, r.stderr);
+    const p = readLedger(d, 'proofs')[0];
+    assert.deepEqual({ files: p.files, lines: p.lines, areas: p.areas, unmapped: p.unmapped }, { files: 2, lines: 3, areas: ['mod.js'], unmapped: 1 });
+    const honest = 'Not done.\n\n```\n' + proofBlock({ check: 'x', failed_before: 'no', passed_after: 'no', status: 'NOT_VERIFIED: check fails after', pending: 0 }) + '\n```\n';
+    await runHook(ORACLE, { input: stopPayload(d, honest), env: baseEnv(), cwd: d });
+    assert.equal(readLedger(d, 'proofs')[1].files, 2, 'an honest NOT_VERIFIED carries the cost too');
+    const ledgerMod = require(join(root, 'plugin', 'hooks', 'devanity-ledger.js'));
+    assert.deepEqual(ledgerMod.stats(d).cost, { changes: 1, median_files: 2, median_lines: 3, median_areas: 1 });
+  });
+});
+
 describe('oracle: an impossible obligation is an honest NOT_VERIFIED that asks (A1.2)', () => {
   const impossible = (conflict) => 'Blocked.\n\n```\n' + proofBlock({ check: 'node --test mod.test.js', failed_before: 'n/a', passed_after: 'n/a', status: `NOT_VERIFIED: impossible: ${conflict}`, pending: 0 }) + '\n```\n';
   const prompt = (cwd, text) => JSON.stringify({ hook_event_name: 'UserPromptSubmit', session_id: 'h1', cwd, prompt: text });
