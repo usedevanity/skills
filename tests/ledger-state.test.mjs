@@ -249,6 +249,18 @@ describe('a [DECIDE] block becomes a pending decision a human can answer later',
     assert.ok(!m.stdout.includes('y'.repeat(200)), 'each invariant is clipped');
   });
 
+  test('the derivation line is recorded and listed; a block without one lists `none given` (A2.2)', async () => {
+    const d = repo();
+    const withIt = decideBlock('G-010', 'Round refunds up?').replace('  - context:', '  - derivation: tried P-001 (amounts are integer cents); it says nothing about rounding\n  - context:');
+    await run(ORACLE, { input: stopPayload(d, withIt), cwd: d });
+    await run(ORACLE, { input: stopPayload(d, decideBlock('G-011', 'Which currencies?')), cwd: d });
+    const byId = Object.fromEntries(ledger.pendingDecisions(d).map((x) => [x.id, x]));
+    assert.ok(byId['G-010'].derivation.startsWith('tried P-001'), JSON.stringify(byId['G-010']));
+    assert.equal(byId['G-011'].derivation, undefined);
+    const m = await run(MODE, { input: prompt(d, '/devanity pending'), cwd: d });
+    assert.ok(m.stdout.includes('derivation: tried P-001') && m.stdout.includes('derivation: none given'), m.stdout);
+  });
+
   test('an answer given without --path says it authorizes no edit, and nothing else', async () => {
     const d = repo();
     await run(ORACLE, { input: stopPayload(d, decideBlock('G-001', 'Refunds?')), cwd: d });

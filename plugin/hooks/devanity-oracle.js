@@ -95,7 +95,7 @@ function findContractBlock(text) {
 // A block's fields are the indented lines right under it, up to the next headline: linear in the
 // message, however many headlines it holds.
 const DECIDE_HEAD = /^\s*-\s+\*\*\[DECIDE\]\[(blocking|dormant)\]\[(G-\d{3,})\]\[([a-z]+)\]/;
-const DECIDE_FIELD = /^\s+-\s+(decision|context|options|recommendation|if undecided):/;
+const DECIDE_FIELD = /^\s+-\s+(decision|derivation|context|options|recommendation|if undecided):/;
 const DECIDE_LINE_MAX = 2000;
 const DECIDE_FIELDS_MAX = 10;
 const DECIDE_PER_MESSAGE = 20;   // pending records one message may add; the rest are a flood, not questions
@@ -149,7 +149,7 @@ function persistDecisions(root, blocks, sid) {
     let id = b.id;
     for (let k = 2; ids.has(id); k++) id = `${b.id}-${k}`;
     const rec = { id, status: 'pending', by: 'agent', kind: 'human', decide_kind: b.kind, question: b.question };
-    for (const k of ['decision', 'context', 'options', 'recommendation', 'if_undecided']) if (b[k]) rec[k] = b[k];
+    for (const k of ['decision', 'derivation', 'context', 'options', 'recommendation', 'if_undecided']) if (b[k]) rec[k] = b[k];
     if (!ledger.append(root, 'decisions', rec, sid)) break;   // an unwritable ledger fails the same way for the next one
     ids.add(id); asked.add(b.question); added++;
   }

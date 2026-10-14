@@ -144,12 +144,14 @@ none
 ### Decisions
 - **[DECIDE][blocking][G-003][acceptance] Authorize a write to the money path to fix G-001?**
   - decision: whether the billing sum may change; an authorization this run does not hold (kernel rung 4).
+  - derivation: none applies; no principle under `billing/**` speaks to the sum's correction.
   - context: anchors G-001; `sumLineItems` is a billing path.
   - options: authorize → `/devanity improve G-001` proposes the patch and stops for this answer · decline → G-001 stays open · test only → land the failing case as a test and re-decide.
   - recommendation: authorize; a known failing case, and the fix is smaller than the exposure.
   - if undecided: the P0 stays unaccepted and re-fires on the next audit.
 - **[DECIDE][blocking][G-004][rule] Is "money integers" a contract worth a gate?**
   - decision: whether the rule is durable intent (enforce it) or a stale preference (demote it); product intent.
+  - derivation: none applies; the rule is prose only, with no principle or decision behind it.
   - context: anchors G-002.
   - options: enforce → `/devanity improve G-002` · demote → rewrite the line as guidance, close G-002 · defer → dormant, worth doing when the next money bug lands.
   - recommendation: enforce, after G-001.

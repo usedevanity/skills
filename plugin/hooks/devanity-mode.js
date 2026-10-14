@@ -94,6 +94,7 @@ function pendingList(cwd) {
     const head = `- ${rt.clip(d.id, 40)}${str(d.question) ? `: ${rt.clip(d.question, 300)}` : ''}  path: ${rt.clip(path || '(none)', 120)}  queued by: ${rt.clip(str(d.by) || '?', 20)}  at: ${rt.clip(str(d.ts) || '?', 30)}`;
     const rule = path && !loaded.errors.length ? rulesMod.ruleFor(loaded.rules, path) : null;
     const detail = [
+      str(d.question) && `    derivation: ${rt.clip(str(d.derivation) || 'none given', 400)}`,   // what was tried before asking (A2.2)
       str(d.options) && `    options: ${rt.clip(d.options, 400)}`,
       str(d.recommendation) && `    recommendation: ${rt.clip(d.recommendation, 400)}`,
       str(d.if_undecided) && `    if undecided: ${rt.clip(d.if_undecided, 400)}`,

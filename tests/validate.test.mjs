@@ -140,6 +140,13 @@ const withRepoCopy = (fn) => {
   } finally { rmSync(dir, { recursive: true, force: true }); }
 };
 
+test('a blocking [DECIDE] example in a skill file carries its derivation line; one without fails; a dormant one-liner needs none (A2.2)', () => {
+  const block = (extra) => ['- **[DECIDE][blocking][G-001][rule] Round refunds up?**', '  - decision: how refunds round', extra, '  - context: the ticket asks; no rule exists · anchors G-002', '  - options: up → simpler · half-even → fairer · no-op → manual', '  - recommendation: up; one line of code', '  - if undecided: refund() stays a failing stub'].filter(Boolean).join('\n');
+  withSkill('foo', fm('foo'), (dir, write) => { write('reference/x.md', `# x\n\n${block('  - derivation: tried P-001 (amounts are integer cents); it says nothing about rounding')}\n`); assert.deepEqual(validate(dir), []); });
+  withSkill('foo', fm('foo'), (dir, write) => { write('reference/x.md', `# x\n\n${block('')}\n`); failsWith(validate(dir), 'derivation'); });
+  withSkill('foo', fm('foo'), (dir, write) => { write('reference/x.md', '# x\n\n- [DECIDE][dormant][G-003][trade] Later — worth doing when it hurts — anchors K\n'); assert.deepEqual(validate(dir), []); });
+});
+
 test('the repository copy passes; each way of pointing outside the installed plugin fails', () => {
   withRepoCopy((dir) => {
     assert.deepEqual(checkRepository(dir), []);

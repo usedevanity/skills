@@ -59,6 +59,7 @@ Deep (high-risk domain) · check: `pnpm test --filter auth` → 12 passed, no si
 ### Decisions
 - **[DECIDE][blocking][G-003][acceptance] Ship the delete route without permission tests?**
   - decision: whether unverified permission behavior may ship; a risk acceptance, not a technical choice.
+  - derivation: none applies; no principle or accepted risk covers an untested permission gate.
   - context: anchors G-001; high-risk class, guarded today only by human review.
   - options: decline → add the tests, re-run review · accept → PASS_WITH_ACCEPTED_RISK, with who, why, expiry and a compensating control recorded.
   - recommendation: decline; the fix is one file, cheaper than the recorded risk.

@@ -144,6 +144,17 @@ export function validate(skillsDir) {
       const d = join(root, sub);
       if (existsSync(d)) for (const f of readdirSync(d)) if (f.endsWith('.md')) scanFiles.push(join(d, f));
     }
+    // 2b. The decision grammar (A2.2): a blocking [DECIDE] states what was tried before asking. Every
+    // example the model will imitate carries the line, fenced or not; a dormant one-liner has no fields.
+    for (const file of scanFiles) {
+      const lines = readFileSync(file, 'utf8').split('\n');
+      lines.forEach((line, i) => {
+        if (!/^\s*-\s+\*\*\[DECIDE\]\[blocking\]/.test(line)) return;
+        let j = i + 1;
+        while (j < lines.length && /^\s+-\s+/.test(lines[j]) && !/^\s+-\s+\*\*\[DECIDE\]/.test(lines[j])) j++;
+        if (!lines.slice(i + 1, j).some((l) => /^\s+-\s+derivation:/.test(l))) err(skill, `${file.slice(root.length + 1)}:${i + 1} blocking [DECIDE] without a derivation line (the principle tried, and why it does not decide this)`);
+      });
+    }
     for (const file of scanFiles) {
       const body = stripFences(readFileSync(file, 'utf8'));
       for (const ref of body.matchAll(/`((?:reference|modes)\/[^`\s]+\.md)`/g)) {

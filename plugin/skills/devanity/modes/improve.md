@@ -57,6 +57,7 @@ Fixing G-001 from the audit example. It alters what a billing path returns, so t
 ```md
 - **[DECIDE][blocking][G-005][acceptance] Authorize the cents fix to `sumLineItems`?**
   - decision: whether this run may write to the billing path.
+  - derivation: tried the ledger: no human decision covers `billing/**` in this change.
   - context: anchors G-001; the patch sums in integer cents and adds the failing case as a test.
   - options: authorize → the oracle-first sequence runs and the fix applies · decline → the patch stays a proposal · test only → land the oracle, leave the arithmetic.
   - recommendation: authorize; the failing case is known, and the oracle lands with the fix.
