@@ -257,7 +257,14 @@ function cost(proofs) {
   for (const p of proofs) if (p && typeof p.files === 'number') last.set(p.contract || 'adhoc', p);
   const rows = [...last.values()];
   const median = (xs) => { if (!xs.length) return null; const s = [...xs].sort((a, b) => a - b); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
-  return { changes: rows.length, median_files: median(rows.map((r) => r.files)), median_lines: median(rows.map((r) => r.lines)), median_areas: median(rows.map((r) => (Array.isArray(r.areas) ? r.areas.length : 0))) };
+  // Scope coverage (A0.5): over the changes that declared a scope, the share of changed paths it covered.
+  const scoped = rows.filter((r) => typeof r.in_scope === 'number');
+  const inScope = scoped.reduce((n, r) => n + r.in_scope, 0);
+  const scopedFiles = scoped.reduce((n, r) => n + r.in_scope + (r.out_of_scope || 0), 0);
+  return {
+    changes: rows.length, median_files: median(rows.map((r) => r.files)), median_lines: median(rows.map((r) => r.lines)), median_areas: median(rows.map((r) => (Array.isArray(r.areas) ? r.areas.length : 0))),
+    scoped_changes: scoped.length, scoped_files: scopedFiles, in_scope: inScope, scope_coverage: scopedFiles ? Math.round((inScope / scopedFiles) * 100) / 100 : null,
+  };
 }
 
 // Principle candidates (A2.4): three or more human decisions of one kind under one map area are
@@ -320,7 +327,7 @@ function renderStats(s) {
     s.principles.candidates.length
       ? `principles: ${s.principles.candidates.length} candidate${s.principles.candidates.length > 1 ? 's' : ''} · ${s.principles.candidates.map((c) => `${c.area} ${c.kind} ×${c.decisions.length} (${c.decisions.join(', ')})`).join(' · ')}`
       : 'principles: no candidate',
-    s.cost.changes ? `cost: ${s.cost.changes} change${s.cost.changes > 1 ? 's' : ''} · median ${s.cost.median_files} files · ${s.cost.median_lines} lines · ${s.cost.median_areas} map areas` : 'cost: no measured change',
+    s.cost.changes ? `cost: ${s.cost.changes} change${s.cost.changes > 1 ? 's' : ''} · median ${s.cost.median_files} files · ${s.cost.median_lines} lines · ${s.cost.median_areas} map areas${s.cost.scope_coverage === null ? '' : ` · scope coverage ${s.cost.scope_coverage} (${s.cost.in_scope} of ${s.cost.scoped_files} files)`}` : 'cost: no measured change',
   ].join('\n');
 }
 

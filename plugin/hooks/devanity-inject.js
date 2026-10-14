@@ -81,7 +81,7 @@ function changeContext(cwd) {
   const c = ledger.openContract(cwd);
   if (!c) return '';
   const lines = [`## Open change ${clip(c.id)}`, `phase: ${c.phase} · pending: ${clip(c.pending) || '0'}`];
-  for (const k of ['intent', 'scope', 'forbidden', 'proof']) if (c[k]) lines.push(`${k}: ${clip(c[k])}`);
+  for (const k of ['parent', 'intent', 'scope', 'forbidden', 'proof']) if (c[k]) lines.push(`${k}: ${clip(c[k])}`);
   lines.push(phaseLine(c));
   const text = lines.join('\n');
   return text.length > CHANGE_CONTEXT_MAX_CHARS ? text.slice(0, CHANGE_CONTEXT_MAX_CHARS - 1) + '…' : text;
