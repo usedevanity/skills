@@ -125,6 +125,10 @@ function decide(args, cwd, sessionId) {
   const rejected = REJECT.test(chosen.trim().toLowerCase().replace(/[.!?,;:]+$/, '').split(/[\s,;:!?.]+/)[0] || '') || REJECT_PHRASE.test(chosen.trim());
   const record = { id, status: rejected ? 'rejected' : 'decided', by: 'human', chosen, kind: (known && known.kind) || 'human' };
   if (pathGlob) record.path = pathGlob;
+  // The answer as typed stays in `chosen`; `option` is the offered label it names, when it names
+  // exactly one, so `stats` can score the recommendation against it (A0.2).
+  const option = !rejected && known ? ledger.labelOf(known.options, chosen) : null;
+  if (option) record.option = option;
   // Scope: the decision serves the open change (and lives as long as it is open), else it expires
   // after ledger.DECISION_TTL_MS; it never authorizes every later session.
   const change = ledger.openContract(cwd);
@@ -160,6 +164,15 @@ function status(cwd) {
   return `DEVANITY STATUS: state ${state}; open change: ${change}; pending decisions: ${ledger.pendingDecisions(cwd).length}.`;
 }
 
+// Every human prompt is one attention event (A0.1): its type, its size and the change it lands in.
+// The text itself never enters the ledger. Best effort, like every ledger write.
+function recordTurn(cwd, raw, type, sessionId, decisionId) {
+  const c = ledger.openContract(cwd);
+  const rec = { kind: 'human_turn', type, chars: raw.length, contract: c ? c.id : null, phase: c ? c.phase : null };
+  if (decisionId) rec.decision = decisionId;
+  ledger.append(cwd, 'events', rec, sessionId);
+}
+
 function main() {
   rt.readStdinJson((payload) => {
     let out = '';
@@ -168,6 +181,7 @@ function main() {
       const cwd = payload.cwd && String(payload.cwd).trim() ? String(payload.cwd) : process.cwd();
       const d = DECIDE.exec(raw);
       const intent = intentOf(raw);
+      if (raw) recordTurn(cwd, raw, d ? 'decide' : raw.startsWith('/') ? 'command' : 'message', payload.session_id, d ? String(d[1] || '').trim().split(/\s+/)[0] : null);
       if (d) out = decide(d[1], cwd, payload.session_id);
       else if (intent === 'pending') out = pendingList(cwd);
       else if (intent === 'reset') out = reset(cwd, payload.session_id);

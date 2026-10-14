@@ -180,6 +180,28 @@ function prune(cwd, now = Date.now()) {
   }
 }
 
+// ---------------------------------------------------------------- option labels
+
+// A [DECIDE] block's `options:` line is `<label> → consequence · <label> → consequence`; the label
+// is the id a human answers with and the one the recommendation names. `labelOf` maps free text
+// (an answer, a recommendation) onto one of those labels: the whole text, or its first word when
+// exactly one label starts with it. Null when nothing matches or the match is ambiguous.
+const norm = (s) => String(s || '').toLowerCase().replace(/[.!?,;:]+$/, '').replace(/\s+/g, ' ').trim();
+const firstWord = (s) => norm(s).split(/[\s,:;.!?]+/)[0] || '';
+function optionLabels(options) {
+  return String(options || '').split('·').map((o) => norm(o.split('→')[0])).filter(Boolean);
+}
+function labelOf(options, text) {
+  const labels = optionLabels(options);
+  const t = norm(text);
+  if (!labels.length || !t) return null;
+  const exact = labels.find((l) => l === t);
+  if (exact) return exact;
+  const w = firstWord(t);
+  const byWord = labels.filter((l) => firstWord(l) === w);
+  return byWord.length === 1 ? byWord[0] : null;
+}
+
 // ---------------------------------------------------------------- stats
 
 // The repository's numbers over the retention window. Read-only; null outside git.
@@ -219,7 +241,34 @@ function stats(cwd, now = Date.now()) {
       blocked: count(events, (e) => e.kind === 'blocked'),
       would_block: count(events, (e) => e.kind === 'would_block'),
     },
+    attention: attention(events, open),
+    recommendation: recommendation(dec),
   };
+}
+
+// Human turns (A0.1): what the developer's attention was spent on, and how much of it landed
+// inside the open change.
+function attention(events, open) {
+  const turns = events.filter((e) => e.kind === 'human_turn');
+  const openIds = new Set(open.map((c) => c.id));
+  const of = (type) => turns.filter((t) => t.type === type).length;
+  return { human_turns: turns.length, decide: of('decide'), command: of('command'), message: of('message'), in_open_change: turns.filter((t) => openIds.has(t.contract)).length };
+}
+
+// How often the agent's recommendation was the answer the human gave (A0.2): scored only where the
+// answer matched an offered label and the recommendation named one; per decide kind.
+function recommendation(dec) {
+  const decided = dec.filter((d) => d.status === 'decided' && d.by === 'human');
+  const out = { decided: decided.length, scored: 0, matched: 0, by_kind: {} };
+  for (const d of decided) {
+    const rec = d.option ? labelOf(d.options, d.recommendation) : null;
+    if (!rec) continue;
+    const kind = d.decide_kind || 'unknown';
+    const k = out.by_kind[kind] || (out.by_kind[kind] = { scored: 0, matched: 0 });
+    out.scored++; k.scored++;
+    if (rec === d.option) { out.matched++; k.matched++; }
+  }
+  return out;
 }
 
 function renderStats(s) {
@@ -230,7 +279,14 @@ function renderStats(s) {
     `proofs: ${s.proofs.verified} VERIFIED · ${s.proofs.not_verified} NOT_VERIFIED · ${s.proofs.false_ready} false_ready`,
     `contracts: ${s.contracts.open} open · ${s.contracts.done} done · ${s.contracts.abandoned} abandoned · ${s.contracts.expired} expired`,
     `guards: ${s.events.blocked} blocked · ${s.events.would_block} would_block`,
+    `attention: ${s.attention.human_turns} human turns · ${s.attention.decide} decide · ${s.attention.command} command · ${s.attention.message} message · ${s.attention.in_open_change} in the open change`,
+    `recommendation: ${s.recommendation.scored} of ${s.recommendation.decided} decided answers scored · ${s.recommendation.matched} matched the recommendation${renderKinds(s.recommendation.by_kind)}`,
   ].join('\n');
+}
+
+function renderKinds(byKind) {
+  const parts = Object.entries(byKind).map(([k, v]) => `${k} ${v.matched}/${v.scored}`);
+  return parts.length ? ` (${parts.join(', ')})` : '';
 }
 
 // ---------------------------------------------------------------- CLI
@@ -259,7 +315,7 @@ function cli(argv) {
 
 module.exports = {
   CONTRACT_PHASES, KINDS,
-  DECISION_TTL_MS, append, contracts, decisions, expiredContracts, humanDecisionFor, ledgerDir,
+  DECISION_TTL_MS, append, contracts, decisions, expiredContracts, humanDecisionFor, labelOf, ledgerDir,
   openContract, openContracts, pendingDecisions, prune, read, stats,
 };
 
