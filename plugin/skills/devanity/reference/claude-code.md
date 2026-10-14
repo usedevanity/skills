@@ -28,8 +28,8 @@ Held by the model alone: a read-only mode writes nothing unless the user asks fo
 ## Subagents (measured on 2.1.296, headless `claude -p --plugin-dir`, 2026-10-14)
 
 - `SubagentStart`, `PreToolUse` and `SubagentStop` inside a subagent carry `agent_id` and `agent_type`; a plugin agent's type is namespaced `<plugin>:<agent>`, so a guard matches the suffix.
-- `isolation: worktree` holds for a plugin-distributed agent: its `cwd` and writes land in `<repo>/.claude/worktrees/agent-<id>` on branch `worktree-agent-<id>` from the default branch; a worktree with changes stays on disk.
-- `SubagentStop` with `{"decision":"block","reason":…}` keeps the subagent running with the reason as its next instruction and fires again with `stop_hook_active: true`; the payload names `agent_transcript_path`, deleted under `--no-session-persistence`.
+- `isolation: worktree` holds for a plugin-distributed agent: its `cwd` and writes land in `<repo>/.claude/worktrees/agent-<id>` on branch `worktree-agent-<id>` from the default branch.
+- `SubagentStop` with `{"decision":"block","reason":…}` keeps the subagent running with the reason as its next instruction and fires again with `stop_hook_active: true`; the payload names `agent_transcript_path`.
 
 ## Menus
 
