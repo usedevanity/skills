@@ -137,6 +137,7 @@ devanity-proof:
 4. **The run**, within one budget (`DEVANITY_ORACLE_TIMEOUT_MS`, default 120 s; the `Stop` entry in `hooks.json` allows 150 s, raise both together):
    - baseline = `git worktree add --detach <tmp> HEAD`; on an unborn repository (no commit yet) the baseline is an empty directory;
    - overlay = every changed or untracked file that matches the test globs (`rules.json#tests`, default `test_*`, `*_test.*`, `*.test.*`, `*.spec.*`, `tests/**`) copied into the baseline at the same relative path;
+   - **frozen tests** (A1.1): before the run, a changed or deleted test file that exists at HEAD stops the measurement: an old test rewritten to match the change is a contract question, not a proof. The claim is rewritten to `NOT_VERIFIED: old test changed (<paths>)` (`failed_before`/`passed_after: n/a`, `false_ready` recorded, the check not run), one pending `scope` decision per path (`T-<name>`) is queued, and the block tells the agent to restore the test or raise a `[DECIDE][scope]`. A human decision covering the path (`/devanity decide T-<name> <option> --path <test>`, scoped to the open change) lifts the freeze: the edited test is then the contract and the overlay measures as usual. A new test file never freezes;
    - `failed_before` = the check exits non-zero in the baseline; `passed_after` = it exits zero in the working tree. Both runs use `sh -c` (`cmd /c` on Windows) in the directory the session runs in;
    - the worktree is removed afterwards, also on timeout.
 5. **The verdict**: `VERIFIED` only when `failed_before && passed_after`. Otherwise the status is rewritten with the reason:
@@ -147,6 +148,7 @@ devanity-proof:
    | check fails in the working tree | `NOT_VERIFIED: check fails after` |
    | budget exhausted | `NOT_VERIFIED: timeout` |
    | worktree could not be created | `NOT_VERIFIED: no baseline` |
+   | a test that existed at HEAD changed, no human decision on its path | `NOT_VERIFIED: old test changed (<paths>)` |
 
 6. **Ledger**: every claim appends to `proofs.jsonl` `{kind: 'proof', contract, check, agent_check, head, failed_before, passed_after, status, agent_status, probes, pending, measured, reason}` (`check` is the declared check that ran, `measured: null` when nothing was re-run). When `status` differs from what the agent wrote, `events.jsonl` gets `{kind: 'false_ready', check, agent_status, status, reason}`. That divergence is the `false_ready` metric of the harness.
 

@@ -40,6 +40,7 @@ const REASONS = {
   noCheck: 'no check',
   noDeclaredCheck: 'no declared check (devanity.rules.json at HEAD names none for the changed paths)',
   timeout: 'timeout',
+  oldTestChanged: 'old test changed',
 };
 
 // ---------------------------------------------------------------- the block
@@ -285,6 +286,25 @@ function runCheck(command, cwd, deadline) {
   }
 }
 
+// Tests that existed at HEAD are frozen (A1.1): the overlay lets a NEW test fail on HEAD, but an
+// OLD test edited (or deleted) to match the change is a contract question, not a proof. The
+// changed test paths present in HEAD, minus those a human decision already covers.
+function changedOldTests(root, rules, paths) {
+  return paths.filter((rel) => rulesMod.isTestPath(rules, rel)
+    && git(root, ['cat-file', '-e', `HEAD:${rel}`]).status === 0
+    && !ledger.humanDecisionFor(root, rel, rulesMod.globToRegExp));
+}
+
+// One pending decision per frozen test, with the ledger id a human answers; never queued twice.
+function queueTestDecisions(root, frozen, sid) {
+  const ids = new Set(ledger.decisions(root).map((d) => d.id));
+  for (const rel of frozen) {
+    const id = `T-${rel.replace(/\.[^.]+$/, '').replace(/[^A-Za-z0-9_-]+/g, '-')}`;
+    if (ids.has(id)) continue;
+    ledger.append(root, 'decisions', { id, path: rel, kind: 'human', status: 'pending', by: 'agent', decide_kind: 'scope', question: `A test that existed at HEAD changed: ${rel}. A contract change, or a regression to restore?` }, sid);
+  }
+}
+
 // Baseline = HEAD in a detached worktree (or an empty directory when HEAD is unborn), with the
 // working tree's test files overlaid. Returns {dir, cleanup, error}.
 function makeBaseline(root, head, rules, paths, deadline) {
@@ -395,14 +415,22 @@ function decide(payload, env = process.env) {
     return { action: 'exit' };
   }
 
+  const baseline = info.head ? `HEAD@${info.head.slice(0, 12)} + tests overlay` : 'empty tree + tests overlay';
+  const frozen = info.head ? changedOldTests(root, loaded.rules, paths) : [];
+  if (frozen.length) {
+    const status = `NOT_VERIFIED: ${REASONS.oldTestChanged} (${frozen.join(', ')})`;
+    ledger.append(root, 'proofs', { ...base, check, failed_before: null, passed_after: null, status, measured: true, reason: REASONS.oldTestChanged, paths: frozen }, sid);
+    ledger.append(root, 'events', { kind: 'false_ready', check, agent_status: agentStatus, status, reason: REASONS.oldTestChanged, head: info.head }, sid);
+    queueTestDecisions(root, frozen, sid);
+    const corrected = renderProofBlock({ ...agent, check, baseline, failed_before: 'n/a', passed_after: 'n/a', status, pending: String(ledger.pendingDecisions(root).length) });
+    const note = `Tests that existed at HEAD changed: ${frozen.join(', ')}. The oracle cannot measure a claim against a test the change rewrote. A regression: restore the test. A changed contract: raise a [DECIDE][scope] naming it; a human answers with \`/devanity decide <id> <option> --path ${frozen[0]}\`, and the next measurement treats the edited test as the contract.`;
+    return { action: 'correct', block: corrected, reason: REASONS.oldTestChanged, note };
+  }
+
   const timeoutMs = Math.max(1000, parseInt(env.DEVANITY_ORACLE_TIMEOUT_MS, 10) || DEFAULT_TIMEOUT_MS);
   const m = measure({ root, head: info.head, cwd, rules: loaded.rules, check, paths, timeoutMs });
   ledger.append(root, 'proofs', { ...base, check, failed_before: m.failed_before, passed_after: m.passed_after, status: m.status, measured: true, reason: m.reason }, sid);
-  const corrected = renderProofBlock({
-    ...agent, check,
-    baseline: info.head ? `HEAD@${info.head.slice(0, 12)} + tests overlay` : 'empty tree + tests overlay',
-    failed_before: yesNo(m.failed_before), passed_after: yesNo(m.passed_after), status: m.status, pending,
-  });
+  const corrected = renderProofBlock({ ...agent, check, baseline, failed_before: yesNo(m.failed_before), passed_after: yesNo(m.passed_after), status: m.status, pending });
   if (m.status === 'VERIFIED') return { action: 'exit', block: corrected };
   ledger.append(root, 'events', { kind: 'false_ready', check, agent_status: agentStatus, status: m.status, reason: m.reason, head: info.head }, sid);
   return { action: 'correct', block: corrected, reason: m.reason, tail: m.tail };
@@ -423,6 +451,7 @@ function main() {
       '',
       'Re-emit this devanity-proof block verbatim in your final message and, if you can, fix the cause first (then run the check again and write what it returned).',
     ];
+    if (d.note) lines.push('', d.note);
     if (d.tail) lines.push('', 'check output (tail):', d.tail);
     block(lines.join('\n'));
   });

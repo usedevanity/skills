@@ -18,7 +18,7 @@ What the host provides and what the plugin enforces today. Every other rule in t
 | inject | SessionStart, SubagentStart | injects the kernel, the repository rules and the open change; the verifier gets a one-line note, the worker nothing |
 | mode | UserPromptSubmit | whole-message `/devanity` off, on, status, pending, reset and decide; `decide` is the only writer of `by: human` |
 | guard | PreToolUse | blocks (exit 2) a write to a `high-risk` path with no human decision, a Bash write into one, and a command above the session's authority |
-| oracle | Stop | re-runs the `devanity-proof` check on HEAD plus the test overlay and on the working tree; rewrites an unsupported claim to `NOT_VERIFIED` and blocks the turn once; records `devanity-contract` |
+| oracle | Stop | re-runs the `devanity-proof` check on HEAD plus the test overlay and on the working tree; rewrites an unsupported claim to `NOT_VERIFIED` and blocks the turn once; a test that existed at HEAD and changed is `NOT_VERIFIED: old test changed` with a `scope` decision queued, until a human decision covers its path; records `devanity-contract` |
 | ledger | (library) | keeps decisions, proofs, contracts and events under `<git-common-dir>/devanity/` |
 
 The guards block only with a valid `devanity.rules.json` (or `DEVANITY_GUARDS=on`); otherwise they record `would_block`. Bash detection is a heuristic; the reference CI job (`${CLAUDE_PLUGIN_ROOT}/scripts/devanity-rules-ci.mjs`) is the ceiling. Each hook is documented at https://github.com/usedevanity/skills/blob/main/docs/hooks.md.
