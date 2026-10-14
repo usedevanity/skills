@@ -52,7 +52,7 @@ devanity.rules.json  this repository's own map
 .github/             this repository's CI
 ```
 
-The specification and the plan, [`docs/evolution/SPEC.md`](docs/evolution/SPEC.md) and [`docs/evolution/PLAN.md`](docs/evolution/PLAN.md), are the maintainer's working documents and are written in Portuguese. The PLAN is where task status lives.
+The specification and the plan, [`docs/evolution/SPEC.md`](docs/evolution/SPEC.md) and [`docs/evolution/PLAN.md`](docs/evolution/PLAN.md), are the maintainer's working documents and are written in Portuguese. The PLAN says where the work stands and what comes next; each phase after v1 lives in one issue (#40, #44) with its tasks, status and decisions.
 
 ## The model
 

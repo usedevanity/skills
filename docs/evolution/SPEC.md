@@ -3,7 +3,7 @@
 Status: aprovado para implementação · Versão: 1.1 · Data: 2026-09-26 (convergência da v1, §0; a 1.0 é de 2026-09-23)
 Decisões fixadas: um capability com modos · prefixo `devanity` · comprador primário: quem mantém o repositório.
 
-Este documento é a fonte de verdade para a implementação. O plano de execução, com fases, tarefas, gates e critérios de aceite, está em [PLAN.md](PLAN.md). Quem implementa lê os dois antes de tocar em qualquer arquivo; qualquer desvio da spec é uma decisão registrada aqui, nunca um ajuste silencioso.
+Este documento é o desenho da v1. O que roda hoje está em [docs/hooks.md](../hooks.md) (o que cada hook aplica, grava e não consegue impedir); onde os dois divergirem, o `hooks.md` descreve o que roda. O estado e a ordem do trabalho estão em [PLAN.md](PLAN.md); cada fase posterior à v1 vive numa issue (#40, #44), onde suas decisões ficam registradas. Quem implementa lê os três antes de tocar em qualquer arquivo; um desvio da spec é uma decisão registrada, nunca um ajuste silencioso.
 
 ---
 
