@@ -261,6 +261,21 @@ describe('a [DECIDE] block becomes a pending decision a human can answer later',
     assert.ok(m.stdout.includes('derivation: tried P-001') && m.stdout.includes('derivation: none given'), m.stdout);
   });
 
+  test('several answers in one message: `id option, id option --path glob` records each by human, the path on all; a comma inside one answer is not a split (A2.3)', async () => {
+    const d = repo();
+    await run(ORACLE, { input: stopPayload(d, `${decideBlock('G-001', 'Refunds?')}\n\n${decideBlock('G-002', 'Currencies?', { options: 'usd only → simplest · full refund in 14 days → n/a · no-op → none' })}`), cwd: d });
+    const r = await run(MODE, { input: prompt(d, '/devanity decide G-001 prorate, G-002 full refund in 14 days --path billing/**'), cwd: d });
+    assert.ok(r.stdout.includes('G-001 = prorate') && r.stdout.includes('G-002 = full refund in 14 days'), r.stdout);
+    const byId = Object.fromEntries(ledger.decisions(d).map((x) => [x.id, x]));
+    for (const id of ['G-001', 'G-002']) { assert.equal(byId[id].status, 'decided'); assert.equal(byId[id].by, 'human'); assert.equal(byId[id].path, 'billing/**'); }
+    assert.equal(byId['G-002'].option, 'full refund in 14 days');
+    assert.equal(ledger.pendingDecisions(d).length, 0);
+    await run(ORACLE, { input: stopPayload(d, decideBlock('G-003', 'Rounding?')), cwd: d });
+    const one = await run(MODE, { input: prompt(d, '/devanity decide G-003 no, prorate'), cwd: d });
+    assert.ok(one.stdout.includes('REJECTED'), one.stdout);
+    assert.equal(ledger.decisions(d).find((x) => x.id === 'G-003').chosen, 'no, prorate');
+  });
+
   test('an answer given without --path says it authorizes no edit, and nothing else', async () => {
     const d = repo();
     await run(ORACLE, { input: stopPayload(d, decideBlock('G-001', 'Refunds?')), cwd: d });

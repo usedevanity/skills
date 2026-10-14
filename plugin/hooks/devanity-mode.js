@@ -108,14 +108,32 @@ function pendingList(cwd) {
 // `/devanity decide <id> <option> [--path <glob>]`. An unknown id must name what it authorizes.
 const REJECT = /^(?:no|n|nope|não|nao|reject(?:ed)?|deny|denied|refuse[ds]?|decline[ds]?|rejeit(?:ar|o|ad[oa])|negad[oa]|negar|recus(?:ar|o|ad[oa]))$/i;   // the first word
 const REJECT_PHRASE = /^(?:no way|not now|do not|don't)\b/i;
-function decide(args, cwd, sessionId) {
+// Several answers in one message (A2.3): `G-1 prorate, G-2 usd only --path billing/**`. A comma
+// starts a new answer only when a decision id follows it, so `no, prorate` stays one answer.
+const ID_TOKEN = /^[A-Za-z]{1,2}-\S+$/;
+function decideAll(args, cwd, sessionId) {
   const toks = String(args || '').trim().split(/\s+/).filter(Boolean);
   let pathGlob = null;
   const p = toks.indexOf('--path');
   if (p >= 0) { pathGlob = toks[p + 1] || null; toks.splice(p, 2); }
+  const answers = [[]];
+  for (const t of toks) {
+    const m = /^(.*),$/.exec(t);
+    if (m) { if (m[1]) answers[answers.length - 1].push(m[1]); answers.push([]); }
+    else answers[answers.length - 1].push(t);
+  }
+  const parts = [];
+  for (const a of answers) {
+    if (parts.length && (!a.length || !ID_TOKEN.test(a[0]))) { parts[parts.length - 1].push(',', ...a); continue; }   // not a new answer: the comma was part of the text
+    parts.push(a);
+  }
+  return parts.map((part) => decide(part, pathGlob, cwd, sessionId)).join('\n');
+}
+// One answer; the only writer of by:'human' in the plugin (see the note above).
+function decide(toks, pathGlob, cwd, sessionId) {
   const [id, ...rest] = toks;
-  const chosen = rest.join(' ');
-  if (!id || !chosen) return 'DEVANITY DECIDE: usage is `/devanity decide <id> <option> [--path <glob>]`.';
+  const chosen = rest.join(' ').replace(/\s+,/g, ',');
+  if (!id || !chosen) return 'DEVANITY DECIDE: usage is `/devanity decide <id> <option> [--path <glob>]`, or several: `<id> <option>, <id> <option> [--path <glob>]`.';
   if (!ledger.ledgerDir(cwd)) return 'DEVANITY DECIDE: no ledger here (not a git repository); nothing recorded.';
   const known = ledger.decisions(cwd).find((d) => d.id === id);
   if (!known && !pathGlob) {
@@ -185,7 +203,7 @@ function main() {
       const d = DECIDE.exec(raw);
       const intent = intentOf(raw);
       if (raw) recordTurn(cwd, raw, d ? 'decide' : raw.startsWith('/') ? 'command' : 'message', payload.session_id, d ? String(d[1] || '').trim().split(/\s+/)[0] : null);
-      if (d) out = decide(d[1], cwd, payload.session_id);
+      if (d) out = decideAll(d[1], cwd, payload.session_id);
       else if (intent === 'pending') out = pendingList(cwd);
       else if (intent === 'reset') out = reset(cwd, payload.session_id);
       else if (intent === 'status') out = status(cwd);

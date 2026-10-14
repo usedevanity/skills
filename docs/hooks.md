@@ -88,8 +88,11 @@ Type, as a whole message in the Claude Code prompt:
 
 ```
 /devanity decide <id> <option> [--path <glob>]
+/devanity decide <id> <option>, <id> <option> [--path <glob>]
 /devanity pending
 ```
+
+Several answers in one message (A2.3) record one decision each; the `--path` applies to all of them. A comma starts a new answer only when a decision id follows it (`G-1 no, prorate` stays one answer).
 
 - `decide` appends `{id, status: decided, by: human, chosen, path, contract?}` to `decisions.jsonl`. For an id that is not yet in the ledger, `--path` is mandatory: a human decision must name what it authorizes. For a pending id (queued by an autonomous session) the path is inherited.
 - An answer whose first word is `no`, `n`, `nope`, `reject`, `deny`, `decline`, `refuse`, `não`, `rejeitar`, `negado` or `recuso` (trailing punctuation ignored; also `no way`, `not now`, `don't`) records `status: rejected`: it answers the pending question and authorizes nothing (`DEVANITY DECISION REJECTED: … stay blocked`).
