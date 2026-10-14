@@ -274,7 +274,7 @@ export function checkRepository(root) {
     fail(`plugin/skills/devanity/modes must be the deliberate mode set (${expectedModes.join(', ')}); found: ${modeEntries.join(', ')}`);
   }
 
-  const expectedAgents = ['verifier.md', 'worker.md'];
+  const expectedAgents = ['implementer.md', 'oracle-author.md', 'verifier.md', 'worker.md'];
   const agents = readdirSync(join(root, 'plugin', 'agents')).filter((name) => name.endsWith('.md')).sort();
   if (agents.join(',') !== expectedAgents.join(',')) {
     fail(`plugin/agents/ must be the deliberate role set (${expectedAgents.join(', ')}); found: ${agents.join(', ')}`);

@@ -159,6 +159,42 @@ function authorityMessage(command, need, auth) {
   ].join('\n');
 }
 
+// A role's write boundary (A1.3): the implementer never writes a test file, the oracle-author
+// writes only test files. Who is who comes from the host's agent_type; a human decision on the
+// path lifts it, like every other block.
+function roleMessage(tool, rel, role, via) {
+  const why = role === 'implementer'
+    ? 'the implementer never writes a test file; the oracle-author does (plugin/agents/oracle-author.md)'
+    : 'the oracle-author writes only test files (devanity.rules.json#tests); the implementer writes the rest';
+  return [
+    `devanity: blocked ${tool} on ${rel}${via ? ` (via: ${via})` : ''}`,
+    `  role: ${role} (agent_type): ${why}`,
+    `  Next step: hand the file to the other role, or record the human decision with: ${DECIDE_HINT} ${suggestId(rel)} <option> --path ${rel}`,
+  ].join('\n');
+}
+
+// The approved scope (A1.4): once a human decision with a path is tied to the open change, the
+// union of those paths and the change's declared scope is the write ceiling. An agent-declared
+// scope alone limits nothing: the authority is the human's `decide --path`.
+function approvedScope(root) {
+  const c = ledger.openContract(root);
+  if (!c) return null;
+  const granted = ledger.decisions(root).filter((d) => d.status === 'decided' && d.by === 'human' && d.path && d.contract === c.id);
+  if (!granted.length) return null;
+  const declared = String(c.scope || '').split(/[,\s]+/).filter(Boolean);
+  return { contract: c.id, decisions: granted.map((d) => d.id), approved: [...new Set([...granted.map((d) => d.path), ...declared])] };
+}
+function inApproved(ceiling, rel) {
+  return ceiling.approved.some((g) => rules.globToRegExp(g).test(rel) || rel === g || rel.startsWith(g.replace(/\/?$/, '/')));
+}
+function scopeMessage(tool, rel, ceiling, via) {
+  return [
+    `devanity: blocked ${tool} on ${rel}${via ? ` (via: ${via})` : ''}`,
+    `  outside the scope approved for change ${ceiling.contract}: ${ceiling.approved.join(', ')} (decision ${ceiling.decisions.join(', ')} and the change's scope)`,
+    `  Next step: a human widens it with: ${DECIDE_HINT} S-${suggestId(rel).slice(2)} <option> --path <glob>, or the change closes`,
+  ].join('\n');
+}
+
 // ---- evaluation -------------------------------------------------------------------------------
 
 // Returns null (allow) or {message, event, pending?}.
@@ -179,14 +215,24 @@ function evaluate(payload, env) {
 
   const enforce = rt.guardsEnforcing(loaded, env);   // one decision for guard, oracle and rules context
   const auth = sessionAuthority(loaded, env);
+  const role = rt.agentRole(payload.agent_type);
+  const ceiling = approvedScope(root);
   const findings = [];
 
   const checkPath = (target, via) => {
     const rel = rules.relPath(root, path.isAbsolute(target) ? target : path.join(cwd, target));
     if (!rel) return;
+    if (ledger.humanDecisionFor(root, rel, rules.globToRegExp)) return;   // a human decision on the path lifts every block below
+    const queued = { id: suggestId(rel), path: rel, kind: 'human', status: 'pending', by: 'agent', scope: rel };
+    const isTest = rules.isTestPath(loaded.rules, rel);
+    if ((role === 'implementer' && isTest) || (role === 'oracle-author' && !isTest)) {
+      findings.push({ message: roleMessage(tool, rel, role, via), event: { tool, path: rel, role }, pending: queued });
+    }
+    if (ceiling && !inApproved(ceiling, rel)) {
+      findings.push({ message: scopeMessage(tool, rel, ceiling, via), event: { tool, path: rel, scope: { contract: ceiling.contract, approved: ceiling.approved } }, pending: queued });
+    }
     const rule = ruleWithProtected(loaded, rel);
     if (rule.tier !== 'high-risk') return;
-    if (ledger.humanDecisionFor(root, rel, rules.globToRegExp)) return;
     findings.push({
       message: pathMessage(tool, rel, rule, via),
       event: { tool, path: rel, rule: { glob: rule.glob, tier: rule.tier } },

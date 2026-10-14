@@ -318,6 +318,10 @@ describe('phase-aware injection (F3.2)', () => {
     r = await run(INJECT, { input: subagent(d, 'Explore'), cwd: d });
     const ctx = parseSubagent(r.stdout);
     assert.ok(ctx.includes(KERNEL_MARK) && ctx.includes(CHANGE_HEADING) && ctx.includes('EXECUTE: implement inside scope'));
+    for (const type of ['devanity:implementer', 'oracle-author']) {   // the writing roles get the kernel and the change, like any non-verifier (A1.3)
+      const role = parseSubagent((await run(INJECT, { input: subagent(d, type), cwd: d })).stdout);
+      assert.ok(role.includes(KERNEL_MARK) && role.includes(CHANGE_HEADING), type);
+    }
     const plain = await run(INJECT, { input: subagent(fresh(), 'verifier') });
     const bare = parseSubagent(plain.stdout);
     assert.ok(bare.includes('agents/verifier.md') && !bare.includes('C-1'), 'without an open change the note names no change');

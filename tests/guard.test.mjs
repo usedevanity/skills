@@ -564,6 +564,47 @@ describe('failure paths leave a trace (map invariant for hooks/**)', () => {
   });
 });
 
+describe('guard: roles by agent_type (A1.3)', () => {
+  const as = (type) => ({ agent_type: type, agent_id: 'a1' });
+  test('the implementer never writes a test file; the oracle-author writes only test files; a human decision on the path lifts either', async () => {
+    const d = repo();
+    mkdirSync(join(d, 'tests'), { recursive: true }); writeFileSync(join(d, 'tests', 'x.test.js'), 'a\n');
+    let r = await run(GUARD, { input: edit(d, 'tests/x.test.js', as('devanity:implementer')), cwd: d });
+    assertBlocked(r, 'tests/x.test.js', 'implementer', 'oracle-author', '--path tests/x.test.js');
+    assert.equal(events(d).at(-1).kind, 'blocked'); assert.equal(events(d).at(-1).role, 'implementer');
+    assertAllowed(await run(GUARD, { input: edit(d, 'src/x.py', as('devanity:implementer')), cwd: d }));
+    r = await run(GUARD, { input: bash(d, 'echo x > tests/x.test.js', as('implementer')), cwd: d });
+    assertBlocked(r, 'tests/x.test.js', 'implementer');
+    r = await run(GUARD, { input: edit(d, 'src/x.py', as('devanity:oracle-author')), cwd: d });
+    assertBlocked(r, 'src/x.py', 'oracle-author');
+    assertAllowed(await run(GUARD, { input: edit(d, 'tests/x.test.js', as('oracle-author')), cwd: d }));
+    assertAllowed(await run(GUARD, { input: edit(d, 'tests/x.test.js', as('Explore')), cwd: d }));
+    assertAllowed(await run(GUARD, { input: edit(d, 'tests/x.test.js'), cwd: d }), 'no agent_type: the main session, no role');
+    await run(MODE, { input: prompt(d, '/devanity decide D-tests fix-helper --path tests/x.test.js'), cwd: d });
+    assertAllowed(await run(GUARD, { input: edit(d, 'tests/x.test.js', as('devanity:implementer')), cwd: d }));
+  });
+});
+
+describe('guard: the approved scope is the write ceiling (A1.4)', () => {
+  const seed = (d) => ledger.append(d, 'contracts', { id: 'C-1', phase: 'EXECUTE', intent: 'retries', scope: 'src/upload/**', proof: 'npm test' }, sid);
+  test('with a human decision tied to the open change, writes outside its paths and the change scope block and name both; without one, nothing changes', async () => {
+    const d = repo();
+    mkdirSync(join(d, 'src', 'upload'), { recursive: true }); mkdirSync(join(d, 'src', 'api'), { recursive: true });
+    seed(d);
+    assertAllowed(await run(GUARD, { input: edit(d, 'src/other.py'), cwd: d }), 'an agent-declared scope alone limits nothing');
+    await run(MODE, { input: prompt(d, '/devanity decide G-1 approve --path src/api/**'), cwd: d });
+    assertAllowed(await run(GUARD, { input: edit(d, 'src/upload/a.py'), cwd: d }));
+    assertAllowed(await run(GUARD, { input: edit(d, 'src/api/b.py'), cwd: d }));
+    let r = await run(GUARD, { input: edit(d, 'src/other.py'), cwd: d });
+    assertBlocked(r, 'src/other.py', 'C-1', 'G-1', 'src/api/**', 'src/upload/**', '--path');
+    const e = events(d).at(-1); assert.equal(e.kind, 'blocked'); assert.equal(e.scope.contract, 'C-1');
+    r = await run(GUARD, { input: bash(d, 'sed -i s/a/b/ src/other.py', {}), cwd: d });
+    assertBlocked(r, 'src/other.py', 'C-1');
+    ledger.append(d, 'contracts', { id: 'C-1', phase: 'DONE' }, sid);
+    assertAllowed(await run(GUARD, { input: edit(d, 'src/other.py'), cwd: d }), 'the ceiling ends with the change');
+  });
+});
+
 describe('guard: autonomous session without a human (i)', () => {
   test('a blocked high-risk edit leaves one pending decision; /devanity pending lists it; the session is not stalled', async () => {
     const d = repo();
