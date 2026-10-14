@@ -167,10 +167,12 @@ function status(cwd) {
 // Every human prompt is one attention event (A0.1): its type, its size and the change it lands in.
 // The text itself never enters the ledger. Best effort, like every ledger write.
 function recordTurn(cwd, raw, type, sessionId, decisionId) {
-  const c = ledger.openContract(cwd);
-  const rec = { kind: 'human_turn', type, chars: raw.length, contract: c ? c.id : null, phase: c ? c.phase : null };
-  if (decisionId) rec.decision = decisionId;
-  ledger.append(cwd, 'events', rec, sessionId);
+  try {
+    const c = ledger.openContract(cwd);
+    const rec = { kind: 'human_turn', type, chars: raw.length, contract: c ? c.id : null, phase: c ? c.phase : null };
+    if (decisionId) rec.decision = decisionId;
+    ledger.append(cwd, 'events', rec, sessionId);
+  } catch (e) { /* measurement never costs the command it measures */ }
 }
 
 function main() {
