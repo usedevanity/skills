@@ -77,6 +77,34 @@ function parseBlock(stdout) {
   return out.reason;
 }
 
+describe('oracle: an impossible obligation is an honest NOT_VERIFIED that asks (A1.2)', () => {
+  const impossible = (conflict) => 'Blocked.\n\n```\n' + proofBlock({ check: 'node --test mod.test.js', failed_before: 'n/a', passed_after: 'n/a', status: `NOT_VERIFIED: impossible: ${conflict}`, pending: 0 }) + '\n```\n';
+  const prompt = (cwd, text) => JSON.stringify({ hook_event_name: 'UserPromptSubmit', session_id: 'h1', cwd, prompt: text });
+
+  test('never blocks, never false_ready; queues one scope decision carrying the conflict, once; a plain NOT_VERIFIED queues nothing', async () => {
+    const d = seedBuggyRepo('node --test mod.test.js');
+    const env = baseEnv();
+    const msg = impossible('the spec says refunds round up, the declared test pins round-half-even');
+    let r = await runHook(ORACLE, { input: stopPayload(d, msg), env, cwd: d });
+    assert.equal(r.code, 0, r.stderr);
+    assert.equal(r.stdout, '', 'an honest NOT_VERIFIED is never blocked');
+    const p = readLedger(d, 'proofs')[0];
+    assert.equal(p.measured, null); assert.ok(p.status.startsWith('NOT_VERIFIED: impossible:'));
+    assert.deepEqual(readLedger(d, 'events').filter((e) => e.kind === 'false_ready'), []);
+    const pending = readLedger(d, 'decisions').filter((x) => x.status === 'pending');
+    assert.equal(pending.length, 1, JSON.stringify(pending));
+    assert.equal(pending[0].decide_kind, 'scope'); assert.equal(pending[0].by, 'agent');
+    assert.ok(pending[0].id.startsWith('I-') && pending[0].question.includes('round-half-even'), JSON.stringify(pending[0]));
+    r = await runHook(ORACLE, { input: stopPayload(d, msg), env, cwd: d });
+    assert.equal(readLedger(d, 'decisions').filter((x) => x.status === 'pending').length, 1, 'the same conflict is not asked twice');
+    const list = await runHook(MODE, { input: prompt(d, '/devanity pending'), env, cwd: d });
+    assert.ok(list.stdout.includes('round-half-even'), list.stdout);
+    const plain = 'Not done.\n\n```\n' + proofBlock({ check: 'x', failed_before: 'no', passed_after: 'no', status: 'NOT_VERIFIED: check fails after', pending: 0 }) + '\n```\n';
+    r = await runHook(ORACLE, { input: stopPayload(d, plain), env, cwd: d });
+    assert.equal(readLedger(d, 'decisions').filter((x) => x.status === 'pending').length, 1, 'a plain NOT_VERIFIED asks nothing');
+  });
+});
+
 describe('oracle: parsing', () => {
   test('finds the FIRST block, any spacing, inside or outside a fence; pending_decisions aliases pending', () => {
     const text = 'prose\n```\ndevanity-proof:\n   check :  pytest -q tests/x\n\tfailed_before:yes\n  passed_after: yes\n  status: VERIFIED\n  pending_decisions: 2\n```\nlater\ndevanity-proof:\n  status: NOT_VERIFIED: second\n';

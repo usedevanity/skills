@@ -403,9 +403,14 @@ function decide(payload, env = process.env) {
   // `probes` is the verifier's count (run/survived); the oracle records it and never measures it.
   const base = { kind: 'proof', contract: contractId, check: null, agent_check: agent.check || null, head: info ? info.head : null, agent_status: agentStatus, probes: agent.probes || null, pending, enforce };
 
-  // An honest NOT_VERIFIED, or a status that claims nothing, needs no re-run.
+  // An honest NOT_VERIFIED, or a status that claims nothing, needs no re-run. One of them asks:
+  // `NOT_VERIFIED: impossible: <conflict>` says the obligation and the declared check contradict
+  // each other (A1.2), so the conflict joins the pending queue as a scope decision, never as a
+  // false_ready: the agent that says so instead of bending a test is doing the right thing.
   if (!/^VERIFIED\b/i.test(agentStatus)) {
     ledger.append(root, 'proofs', { ...base, failed_before: agent.failed_before || null, passed_after: agent.passed_after || null, status: agentStatus || null, measured: null }, sid);
+    const impossible = /^NOT_VERIFIED:\s*impossible\s*:\s*(.+)$/i.exec(agentStatus);
+    if (impossible) persistDecisions(root, [{ status: 'blocking', id: `I-${contractId}`, kind: 'scope', question: rt.clip(`Impossible as stated: ${impossible[1].trim()}. Change the contract, or the obligation?`, 300) }], sid);
     return { action: 'exit' };
   }
 
