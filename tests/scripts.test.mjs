@@ -273,4 +273,10 @@ test('mutants: every changed non-test line gets its operator mutants, each run a
   r = run(MUTANTS, ['--base', 'HEAD~2', '--check', 'test ! -e helper.js && node --test mod.test.js', '--json'], { cwd: d, env });
   assert.equal(r.code, 0, `a deleted file must be absent from the mutant tree: ${r.err}`);
   assert.ok(JSON.parse(r.out).total >= 1);
+  // a tracked file replaced by a directory, and a removed subdirectory, are mirrored too: the copy holds no file and no empty directory where the working tree has none
+  commit(d, { 'gone.js': 'module.exports = 2;\n', 'sub/h.js': 'module.exports = 3;\n' }, 'more');
+  rmSync(join(d, 'gone.js')); mkdirSync(join(d, 'gone.js')); writeFileSync(join(d, 'gone.js', 'inner.txt'), 'x\n');
+  rmSync(join(d, 'sub'), { recursive: true });
+  r = run(MUTANTS, ['--base', 'HEAD~3', '--check', 'test -f gone.js/inner.txt && test ! -e sub && node --test mod.test.js', '--json'], { cwd: d, env });
+  assert.equal(r.code, 0, `a directory in place of a file, and a removed directory, must be mirrored: ${r.err}`);
 });

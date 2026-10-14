@@ -7,7 +7,7 @@
 // oracle quality. The working tree is never touched. Exit 1 on usage or a check that fails unmutated.
 //   node mutants.mjs --base <ref> --check <command> [--json] [--max <n>] [-- <scope…>]
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, writeFileSync, rmSync, mkdirSync, existsSync, copyFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync, rmSync, rmdirSync, mkdirSync, existsSync, copyFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -97,7 +97,15 @@ export function runMutants(root, base, check, { scope = [], max = MAX_MUTANTS } 
     for (const entry of st.stdout.split('\0')) {
       const rel = entry.length > 3 ? entry.slice(3) : '';
       if (!rel) continue;
-      if (!existsSync(join(root, rel))) { rmSync(join(tmp, rel), { force: true }); continue; }   // a deletion is part of the tree too
+      let isFile = false;
+      try { isFile = statSync(join(root, rel)).isFile(); } catch (e) { /* gone */ }
+      // What the working tree no longer holds as a file (deleted, or a directory now) leaves the copy
+      // too, and so does any directory left empty by it: the check sees the tree the writer sees.
+      rmSync(join(tmp, rel), { recursive: true, force: true });
+      for (let dir = dirname(join(tmp, rel)); dir !== tmp && dir.startsWith(tmp); dir = dirname(dir)) {
+        try { rmdirSync(dir); } catch (e) { break; }   // not empty, or gone: stop climbing
+      }
+      if (!isFile) continue;
       mkdirSync(dirname(join(tmp, rel)), { recursive: true });
       copyFileSync(join(root, rel), join(tmp, rel));
     }
