@@ -32,7 +32,7 @@ const ledger = require('./devanity-ledger');
 const DEFAULT_TIMEOUT_MS = 120000;
 const BLOCK_KEYS = ['contract', 'check', 'baseline', 'failed_before', 'passed_after', 'probes', 'status', 'pending', 'pending_decisions'];
 // The lifecycle block, a compact projection of the Change Contract; persisted, never enforced.
-const CONTRACT_KEYS = ['id', 'phase', 'intent', 'scope', 'forbidden', 'proof', 'pending'];
+const CONTRACT_KEYS = ['id', 'phase', 'intent', 'scope', 'forbidden', 'proof', 'pending', 'parent'];
 const REASONS = {
   passedBefore: 'check passed before the fix (no oracle)',
   failsAfter: 'check fails after',
@@ -157,8 +157,19 @@ function persistDecisions(root, blocks, sid) {
 
 function persistContract(root, fields, sid) {
   const rec = { id: fields.id, phase: fields.phase };
-  for (const k of ['intent', 'scope', 'forbidden', 'proof', 'pending']) if (fields[k] !== undefined && fields[k] !== '') rec[k] = fields[k];
+  // `parent` (A4.1): a child change of a milestone names it; nothing else about composition is enforced here.
+  for (const k of ['intent', 'scope', 'forbidden', 'proof', 'pending', 'parent']) if (fields[k] !== undefined && fields[k] !== '') rec[k] = fields[k];
   return ledger.append(root, 'contracts', rec, sid);
+}
+
+// The declared scope over the real diff (A0.5): how many changed paths the change's `scope`
+// covers and how many fall outside. The scope is the block's in this message, else the ledger's
+// for the proof's contract; with none declared nothing is claimed.
+function scopeCoverage(scope, paths) {
+  const globs = String(scope || '').split(/[,\s]+/).filter(Boolean);
+  if (!globs.length) return {};
+  const inScope = paths.filter((rel) => globs.some((g) => rulesMod.globCovers(g, rel))).length;
+  return { in_scope: inScope, out_of_scope: paths.length - inScope };
 }
 
 // The last assistant message of a Claude Code transcript (JSONL), used only when the payload
@@ -424,7 +435,9 @@ function decide(payload, env = process.env) {
   const contractId = agent.contract || (contract ? contract.fields.id : null) || 'adhoc';
   // `probes` is the verifier's count (run/survived); the oracle records it and never measures it.
   const paths = info ? changedPaths(root, info.head) : [];
-  const base = { kind: 'proof', contract: contractId, check: null, agent_check: agent.check || null, head: info ? info.head : null, agent_status: agentStatus, probes: agent.probes || null, pending, enforce, ...(info ? changeCost(root, info.head, loaded.rules, paths) : {}) };
+  // The block's scope, else the ledger's: an empty `scope:` line records nothing, so it decides nothing either.
+  const scope = (contract && contract.fields.scope) || (ledger.contracts(root).find((c) => c.id === contractId) || {}).scope;
+  const base = { kind: 'proof', contract: contractId, check: null, agent_check: agent.check || null, head: info ? info.head : null, agent_status: agentStatus, probes: agent.probes || null, pending, enforce, ...(info ? { ...changeCost(root, info.head, loaded.rules, paths), ...scopeCoverage(scope, paths) } : {}) };
 
   // An honest NOT_VERIFIED, or a status that claims nothing, needs no re-run. One of them asks:
   // `NOT_VERIFIED: impossible: <conflict>` says the obligation and the declared check contradict

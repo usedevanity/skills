@@ -6,6 +6,8 @@
   "required": ["id", "state", "intent", "scope", "requirements", "decisions", "impact", "authority", "verification", "execution", "evidence", "findings", "residual_risk", "completion"],
   "properties": {
     "id": { "type": "string", "minLength": 1 },
+    "parent": { "type": "string", "minLength": 1, "description": "The milestone Change this one is a child of (A4.1); the phase record carries it as `parent:`." },
+    "children": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "The child Changes of a milestone, each run as a gated node." },
     "state": {
       "enum": ["NEW", "FRAMING", "INSPECTING", "NEEDS_DECISION", "READY", "EXECUTING", "VERIFYING", "ASSURING", "CANDIDATE_READY", "NO_CHANGE", "BLOCKED", "NOT_VERIFIED", "INVALID_TARGET"]
     },

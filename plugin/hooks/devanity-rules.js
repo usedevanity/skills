@@ -211,6 +211,12 @@ function ruleFor(rules, rel) {
   return { tier: rules.defaults.tier, ...(best ? best.rule : {}), glob: best ? best.glob : null };
 }
 
+// Whether a declared path (a glob, an exact path or a directory prefix) covers `rel`: the one
+// reading the guard, the ledger and the oracle share.
+function globCovers(glob, rel) {
+  return globToRegExp(glob).test(rel) || rel === glob || rel.startsWith(glob.replace(/\/?$/, '/'));
+}
+
 // An invariant as the model and the human read it: a string as written, a principle as `id: rule`.
 function invariantText(inv) {
   return inv && typeof inv === 'object' ? `${inv.id}: ${inv.rule}` : String(inv);
@@ -613,5 +619,5 @@ function commandAuthority(rules, command) {
 
 module.exports = {
   AUTHORITIES, AUTONOMY_AUTHORITIES, FILE, TIERS,
-  authorityRank, commandAuthority, copyTargets, globToRegExp, invariantText, isTestPath, loadRules, parseRules, relPath, ruleFor, shellCommands, validate,
+  authorityRank, commandAuthority, copyTargets, globCovers, globToRegExp, invariantText, isTestPath, loadRules, parseRules, relPath, ruleFor, shellCommands, validate,
 };

@@ -187,7 +187,7 @@ function approvedScope(root) {
   return { contract: c.id, decisions: granted.map((d) => d.id), approved: [...new Set([...granted.map((d) => d.path), ...declared])] };
 }
 function inApproved(ceiling, rel) {
-  return ceiling.approved.some((g) => rules.globToRegExp(g).test(rel) || rel === g || rel.startsWith(g.replace(/\/?$/, '/')));
+  return ceiling.approved.some((g) => rules.globCovers(g, rel));
 }
 function scopeMessage(tool, rel, ceiling, via) {
   return [

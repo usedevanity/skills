@@ -317,6 +317,15 @@ describe('phase-aware injection (F3.2)', () => {
     for (const s of ['phase: EXECUTE', 'pending: 1', 'intent: add retries', 'scope: src/upload/**', 'forbidden: billing/**', 'proof: node --test tests/upload.test.js']) assert.ok(section.includes(s), `missing "${s}" in:\n${section}`);
     assert.ok(/EXECUTE: implement inside scope/.test(section), section);
     assert.ok(r.stdout.length <= 10000);
+    assert.ok(!section.includes('parent:'), 'a change with no parent shows none');
+  });
+
+  test('a child change names its parent in the section (A4.1)', async () => {
+    const d = repo();
+    seedContract(d, { id: 'C-2', parent: 'C-1' });
+    const r = await run(INJECT, { input: sessionStart(d), args: ['SessionStart'], cwd: d });
+    const section = r.stdout.slice(r.stdout.indexOf(CHANGE_HEADING));
+    assert.ok(section.startsWith('## Open change C-2') && section.includes('parent: C-1'), section);
   });
 
   test('VERIFY: the falsify line; other phases: continue from <phase>; long fields are clipped', async () => {
@@ -463,7 +472,7 @@ describe('ledger CLI (F3.7)', () => {
       attention: { human_turns: 0, decide: 0, command: 0, message: 0, in_open_change: 0 },
       recommendation: { decided: 1, scored: 0, matched: 0, by_kind: {} },
       principles: { candidates: [] },
-      cost: { changes: 0, median_files: null, median_lines: null, median_areas: null },
+      cost: { changes: 0, median_files: null, median_lines: null, median_areas: null, scoped_changes: 0, scoped_files: 0, in_scope: 0, scope_coverage: null },
     });
     r = await run(LEDGER, { args: ['stats'], cwd: d });
     assert.equal(r.code, 0);

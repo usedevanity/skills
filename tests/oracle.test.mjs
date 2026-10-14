@@ -88,7 +88,32 @@ describe('oracle: the cost of the change rides on every proof (A3.1)', () => {
     await runHook(ORACLE, { input: stopPayload(d, honest), env: baseEnv(), cwd: d });
     assert.equal(readLedger(d, 'proofs')[1].files, 2, 'an honest NOT_VERIFIED carries the cost too');
     const ledgerMod = require(join(root, 'plugin', 'hooks', 'devanity-ledger.js'));
-    assert.deepEqual(ledgerMod.stats(d).cost, { changes: 1, median_files: 2, median_lines: 3, median_areas: 1 });
+    assert.deepEqual(ledgerMod.stats(d).cost, { changes: 1, median_files: 2, median_lines: 3, median_areas: 1, scoped_changes: 0, scoped_files: 0, in_scope: 0, scope_coverage: null });
+  });
+});
+
+describe('oracle: the declared scope over the real diff (A0.5), and the parent of a child change (A4.1)', () => {
+  const contractBlock = (fields) => ['devanity-contract:', ...Object.entries(fields).map(([k, v]) => `  ${k}: ${v}`)].join('\n');
+  test('a proof under a change with a scope records how many changed paths fall inside it and outside; without a declared scope nothing is claimed; stats sums the coverage', async () => {
+    const d = seedBuggyRepo('node --test mod.test.js');   // changed: mod.js (in scope), mod.test.js (outside)
+    const msg = 'Done.\n\n```\n' + contractBlock({ id: 'C-7', phase: 'EXECUTE', intent: 'fix add', scope: 'mod.js', parent: 'C-0' }) + '\n\n' + proofBlock({ check: 'node --test mod.test.js', failed_before: 'yes', passed_after: 'yes', status: 'VERIFIED', pending: 0 }) + '\n```\n';
+    let r = await runHook(ORACLE, { input: stopPayload(d, msg), env: baseEnv(), cwd: d });
+    assert.equal(r.code, 0, r.stderr);
+    const p = readLedger(d, 'proofs')[0];
+    assert.deepEqual({ contract: p.contract, in_scope: p.in_scope, out_of_scope: p.out_of_scope }, { contract: 'C-7', in_scope: 1, out_of_scope: 1 });
+    assert.equal(readLedger(d, 'contracts')[0].parent, 'C-0', 'the child names its parent');
+    // the next proof names the contract by id only: the scope comes from the ledger
+    r = await runHook(ORACLE, { input: stopPayload(d, 'Again.\n\n```\n' + proofBlock({ contract: 'C-7', check: 'x', failed_before: 'no', passed_after: 'no', status: 'NOT_VERIFIED: check fails after', pending: 0 }) + '\n```\n'), env: baseEnv(), cwd: d });
+    assert.equal(readLedger(d, 'proofs')[1].in_scope, 1, 'an honest NOT_VERIFIED under the same change carries the coverage too');
+    // a block with an empty `scope:` line records no scope (persistContract skips it), so the ledger's decides, as for the record itself
+    await runHook(ORACLE, { input: stopPayload(d, 'Again.\n\n```\n' + contractBlock({ id: 'C-7', phase: 'EXECUTE', scope: '' }) + '\n\n' + proofBlock({ check: 'x', failed_before: 'no', passed_after: 'no', status: 'NOT_VERIFIED: check fails after', pending: 0 }) + '\n```\n'), env: baseEnv(), cwd: d });
+    assert.equal(readLedger(d, 'proofs').at(-1).in_scope, 1, 'an empty scope line in the block does not hide the ledger scope');
+    r = await runHook(ORACLE, { input: stopPayload(d, claimVerified('node --test mod.test.js')), env: baseEnv(), cwd: d });
+    const adhoc = readLedger(d, 'proofs').at(-1);
+    assert.ok(!('in_scope' in adhoc) && !('out_of_scope' in adhoc), 'no declared scope: no coverage fields');
+    const ledgerMod = require(join(root, 'plugin', 'hooks', 'devanity-ledger.js'));
+    assert.equal(ledgerMod.stats(d).cost.scope_coverage, 0.5);
+    assert.match(spawnSync(process.execPath, [join(root, 'plugin', 'hooks', 'devanity-ledger.js'), 'stats'], { cwd: d, encoding: 'utf8' }).stdout, /^cost: .*scope coverage 0\.5 \(1 of 2 files\)$/m);
   });
 });
 
