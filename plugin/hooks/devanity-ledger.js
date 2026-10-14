@@ -11,6 +11,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const rulesMod = require('./devanity-rules');
 const { spawnSync } = require('child_process');
 
 const KINDS = ['contracts', 'decisions', 'proofs', 'events'];
@@ -243,7 +244,31 @@ function stats(cwd, now = Date.now()) {
     },
     attention: attention(events, open),
     recommendation: recommendation(dec),
+    principles: principles(cwd, dec),
   };
+}
+
+// Principle candidates (A2.4): three or more human decisions of one kind under one map area are
+// the regularity `debt` turns into a proposed principle (the map entry's `invariants`, `from` the
+// decisions). Measured here; the proposal stays the mode's, the acceptance the human's.
+const PRINCIPLE_MIN = 3;
+function principles(cwd, dec) {
+  const common = gitCommonDir(cwd);
+  const root = common && path.basename(common) === '.git' ? path.dirname(common) : cwd;
+  const loaded = rulesMod.loadRules(root);
+  if (!loaded.present || loaded.errors.length) return { candidates: [] };
+  const groups = new Map();
+  for (const d of dec) {
+    if (d.status !== 'decided' || d.by !== 'human' || typeof d.path !== 'string' || !d.path) continue;
+    const area = rulesMod.ruleFor(loaded.rules, d.path).glob;
+    if (!area) continue;
+    const key = `${area}\u0000${d.decide_kind || 'unknown'}`;
+    if (!groups.has(key)) groups.set(key, { area, kind: d.decide_kind || 'unknown', decisions: [] });
+    groups.get(key).decisions.push(d.id);
+  }
+  const candidates = [...groups.values()].filter((g) => g.decisions.length >= PRINCIPLE_MIN)
+    .sort((a, b) => a.area.localeCompare(b.area) || a.kind.localeCompare(b.kind));
+  return { candidates };
 }
 
 // Human turns (A0.1): what the developer's attention was spent on, and how much of it landed
@@ -281,6 +306,9 @@ function renderStats(s) {
     `guards: ${s.events.blocked} blocked · ${s.events.would_block} would_block`,
     `attention: ${s.attention.human_turns} human turns · ${s.attention.decide} decide · ${s.attention.command} command · ${s.attention.message} message · ${s.attention.in_open_change} in the open change`,
     `recommendation: ${s.recommendation.scored} of ${s.recommendation.decided} decided answers scored · ${s.recommendation.matched} matched the recommendation${renderKinds(s.recommendation.by_kind)}`,
+    s.principles.candidates.length
+      ? `principles: ${s.principles.candidates.length} candidate${s.principles.candidates.length > 1 ? 's' : ''} · ${s.principles.candidates.map((c) => `${c.area} ${c.kind} ×${c.decisions.length} (${c.decisions.join(', ')})`).join(' · ')}`
+      : 'principles: no candidate',
   ].join('\n');
 }
 

@@ -462,10 +462,11 @@ describe('ledger CLI (F3.7)', () => {
       events: { blocked: 1, would_block: 2 },
       attention: { human_turns: 0, decide: 0, command: 0, message: 0, in_open_change: 0 },
       recommendation: { decided: 1, scored: 0, matched: 0, by_kind: {} },
+      principles: { candidates: [] },
     });
     r = await run(LEDGER, { args: ['stats'], cwd: d });
     assert.equal(r.code, 0);
-    for (const topic of ['decisions', 'proofs', 'contracts', 'guards', 'attention', 'recommendation']) assert.match(r.stdout, new RegExp(`^${topic}: `, 'm'), `text form lacks the ${topic} line`);
+    for (const topic of ['decisions', 'proofs', 'contracts', 'guards', 'attention', 'recommendation', 'principles']) assert.match(r.stdout, new RegExp(`^${topic}: `, 'm'), `text form lacks the ${topic} line`);
     r = await run(LEDGER, { args: ['stats', '--json'], cwd: fresh() });
     assert.equal(r.stdout.trim(), 'null');
     r = await run(LEDGER, { args: ['stats'], cwd: fresh() });
@@ -528,6 +529,22 @@ describe('principles in the map (A2.1)', () => {
     assert.equal(g.code, 2); assert.ok(g.stderr.includes('P-001: amounts are integer cents'), g.stderr);
     const m = await run(MODE, { input: prompt(d, '/devanity pending'), cwd: d });
     assert.ok(!m.stdout.includes('[object'), m.stdout);
+  });
+});
+
+describe('principle candidates (A2.4)', () => {
+  test('three or more human decisions of one kind under one map area are a candidate principle; fewer, mixed kinds or unmapped paths are not', () => {
+    const d = repo();
+    writeFileSync(join(d, 'devanity.rules.json'), JSON.stringify({ version: 1, paths: { 'billing/**': { tier: 'high-risk' }, 'src/api/**': { tier: 'normal' } } }));
+    const dec = (id, kind, path, extra = {}) => ledger.append(d, 'decisions', { id, status: 'decided', by: 'human', decide_kind: kind, path, chosen: 'a', ...extra });
+    dec('G-1', 'rule', 'billing/a.py'); dec('G-2', 'rule', 'billing/b.py'); dec('G-3', 'rule', 'billing/sub/c.py');
+    dec('G-4', 'scope', 'billing/d.py'); dec('G-5', 'scope', 'billing/e.py');            // two: below the line
+    dec('G-6', 'rule', 'src/api/x.ts'); dec('G-7', 'rule', 'src/api/y.ts'); dec('G-8', 'rule', 'src/api/z.ts', { by: 'agent-default' });   // one is not human
+    dec('G-9', 'rule', 'elsewhere/x'); dec('G-10', 'rule', 'elsewhere/y'); dec('G-11', 'rule', 'elsewhere/z');   // no map area
+    const s = ledger.stats(d);
+    assert.deepEqual(s.principles, { candidates: [{ area: 'billing/**', kind: 'rule', decisions: ['G-1', 'G-2', 'G-3'] }] });
+    const r = spawnSync(process.execPath, [LEDGER, 'stats'], { cwd: d, encoding: 'utf8' });
+    assert.match(r.stdout, /^principles: 1 candidate · billing\/\*\* rule ×3 \(G-1, G-2, G-3\)$/m, r.stdout);
   });
 });
 

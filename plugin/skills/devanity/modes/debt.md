@@ -24,6 +24,7 @@ A signal that recurs becomes structure. Cite the records behind every count; nev
 | `would_block` stable over the window, each one matched by a later human decision on its path (no false block) | enforcement on: a valid map, or `DEVANITY_GUARDS=on` |
 | `blocked` repeated on one class of task | a contract field that class carries from FRAME (the path under `forbidden`, the decision asked up front) |
 | a `deferred:` aging in a top hotspot | a prioritized finding |
+| `stats.principles`: three or more human decisions of one kind under one map area | lane b: a principle for that area, rendered as the `invariants` patch (`{id, rule, kind, from: <the decisions>}`) under a `[DECIDE][rule]`; a principle whose `check` never fired in the ledger is a finding |
 
 Every promotion takes exactly one lane:
 
