@@ -4,6 +4,8 @@ Load: `reference/vocabulary.md`, `reference/quality.md`, `reference/baseline.md`
 
 Fix exactly one approved unit, on the ladder (`reference/quality.md`): a finding, or one instruction surface. The words after `improve` are the reference; with none, ask. When the human typed `improve <ref>`, that is the approval for that one unit; when you routed here yourself, state how you read the reference and ask before any write. Either way, four exceptions stop for a decision with the proposed patch: the high-risk class (kernel rung 4), a trade, a new dependency, or a hook or CI change.
 
+Several references in one invocation (`improve G-001 G-004`, or "the required fixes" of this session's last review: its open P0/P1, never its P2/P3) are several units, run in severity order, each with its own oracle. A unit that hits an exception stops alone; the rest proceed.
+
 ## Resolve
 
 A path to an instruction surface, not a Key, makes that one file the unit: run the instruction syndromes on it (`reference/quality.md`) and apply its dominant fixes inside it. A fix that must write a second file is not this unit: audit it and improve the resulting Key. A path absent from disk is a unit only as the missing home a finding's `fix:` names (`modes/audit.md`, Instruction surfaces): `improve <path>` creates that file with exactly the rules the finding lists, which is propagation, never an empty axis (`reference/quality.md`, Basis-form). No such finding this session → ask.
@@ -15,7 +17,7 @@ A path to an instruction surface, not a Key, makes that one file the unit: run t
 ## Fix
 
 - **Basis-form migration** (case → basis, or collapsing an empty axis) → migrate first, then promote the syndrome to a check. A check written against the case list outlives the cases it was meant to remove.
-- **Mechanizable** → codify the enforcement, not just the instance, using a rule or plugin already available. One that needs a new dependency or a hook or CI change → propose it and stop.
+- **Mechanizable** → a finding about a rule (held only by prose, or recurring) codifies its enforcement with a rule or plugin already available; one that needs a new dependency or a hook or CI change → propose it and stop. A finding about one instance fixes the instance: codifying the rule behind it is a separate finding, raised only on observable repetition (`reference/quality.md`, Promotion).
 - **Not mechanizable** → make the smallest correct prose or spec change. If it needs product or architecture judgment, route it to `/devanity plan` or `/devanity architect`.
 
 Fix one finding with a small patch, never mixed with feature work. A structural change (many files, redrawn boundaries) is not one `improve`: plan it with `/devanity plan`, then run it as a sequence of `improve` units.
@@ -48,7 +50,7 @@ Before verifying, name the expected files in order: oracle first, then implement
 ### Proof                          the devanity-proof block
 ```
 
-Every applied unit ends with the kernel's `devanity-proof` block, which also opens the PR description (the reference CI job refuses a rung-3+ PR without one): `check` is the map's declared check for the path when there is one, else the focused check; `failed_before`/`passed_after` are the red and green runs (`n/a` with no oracle); `probes: 0/0` unless a verifier ran. A unit that stopped before any write emits none.
+Every applied unit ends with the kernel's `devanity-proof` block, which also opens the PR description (the reference CI job refuses a rung-3+ PR without one): `check` is the map's declared check for the path when there is one, else the focused check; `failed_before`/`passed_after` are the red and green runs (`n/a` with no oracle); `probes: 0/0` unless a verifier ran. A unit that stopped before any write emits none. Several units: one report section per unit, then one block whose `check` covers them all, `failed_before: yes` only when every unit's oracle was red.
 
 ## Example
 

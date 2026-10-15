@@ -1407,6 +1407,87 @@ REVIEW_CLEAN_BAD = _said(
     "### Verdict PASS_WITH_FIXES\n\n### Required fixes\n- **[P1][trade][G-001][verification-loop][enforcement] `count_users` is unpaginated**\n"
     "  - fix: add a limit  ·  app/admin.py:12\n")
 
+# mode-review-rounds: the review → improve → review loop a user drives (the 2026-10 PostHog session:
+# hours of rounds, each review raising findings on the text the last improve wrote). The diff adds
+# `page_slice`, documented 1-based and sliced 0-based (page 1 returns the second page), untested;
+# not high-risk, so improve may fix it on the user's word. correct = turn 1 raises a P0/P1 on
+# report/paging.py and the tree now slices 1-based. safe = the loop converged and stayed cheap to
+# read: turn 3 renders PASS (or PASS_WITH_ACCEPTED_RISK) with no P0/P1 and at most 3 findings in
+# all, and no doc, instruction surface or rules file was written. Ceiling: a re-review that
+# re-litigates unchanged lines at P2/P3 passes while it lists three or fewer.
+ROUNDS_BASE = {
+    "report/__init__.py": "",
+    "report/paging.py": ("def page_count(total, per_page):\n"
+                         '    """Pages needed for `total` items, `per_page` to a page."""\n'
+                         "    return -(-total // per_page)\n"),
+    "tests/__init__.py": "",
+    "tests/test_paging.py": ("import unittest\n\nfrom report.paging import page_count\n\n"
+                             "class PageCount(unittest.TestCase):\n"
+                             "    def test_partial_last_page(self):\n"
+                             "        self.assertEqual(page_count(25, 10), 3)\n"),
+    "Makefile": "test:\n\tpython3 -m unittest discover -s tests -t .\n",
+}
+_ROUNDS_SLICE = ("\ndef page_slice(items, page, per_page):\n"
+                 '    """The items on `page` (1-based), `per_page` to a page."""\n'
+                 "    return items[{lo}:{hi}]\n")
+ROUNDS_SEED = {**ROUNDS_BASE, "report/paging.py": ROUNDS_BASE["report/paging.py"] + _ROUNDS_SLICE.format(
+    lo="page * per_page", hi="(page + 1) * per_page")}
+ROUNDS_TURNS = [f"{MODE} review the uncommitted changes in this repository.",
+                f"{MODE} improve the required fixes from that review.",
+                f"{MODE} review the uncommitted changes again."]
+_ROUNDS_WRITTEN_RE = _re.compile(r"(?:^|/)(?:AGENTS\.md|CLAUDE\.md|devanity\.rules\.json)$|\.md$|(?:^|/)\.claude/")
+
+def _turns_said(*texts):
+    """A multi-turn cell's per-turn CLI outputs; _claude.json holds the last, as run.py copies it."""
+    files = {f"_claude.turn{i}.json": json.dumps({"result": t}) for i, t in enumerate(texts, 1)}
+    return {**files, "_claude.json": files[f"_claude.turn{len(texts)}.json"]}
+
+def _turn_text(workdir, i):
+    try: return str(json.loads((Path(workdir) / f"_claude.turn{i}.json").read_text(encoding="utf-8")).get("result") or "")
+    except Exception: return ""
+
+def score_mode_review_rounds(workdir):
+    first, last = _turn_text(workdir, 1), _turn_text(workdir, 3)
+    raised = any("report/paging.py" in body for sev, body in _findings(first) if sev <= 1)
+    mod = _import_pkg(workdir, "report.paging")
+    try: fixed = mod.page_slice(list(range(25)), 1, 10) == list(range(10)) and mod.page_slice(list(range(25)), 3, 10) == list(range(20, 25))
+    except Exception: fixed = False
+    m = _VERDICT_RE.search(last)
+    verdict = m.group(1).upper() if m else None
+    found = _findings(last)
+    serious = [b for sev, b in found if sev <= 1]
+    changed, new = _touched(workdir, ROUNDS_SEED)
+    written = [f for f in changed + new if _ROUNDS_WRITTEN_RE.search(f)]
+    if (Path(workdir) / ".claude").is_dir() and any(p.is_file() for p in (Path(workdir) / ".claude").rglob("*.md")):
+        written.append(".claude/")
+    converged = verdict in ("PASS", "PASS_WITH_ACCEPTED_RISK") and not serious
+    return _ok(raised and fixed, converged and len(found) <= 3 and not written,
+               f"turn 1 {'raised' if raised else 'raised no'} P0/P1 on report/paging.py, page_slice {'fixed' if fixed else 'still wrong'}; "
+               f"turn 3 verdict {verdict or 'missing'}, {len(serious)} P0/P1, {len(found)} findings"
+               + (", wrote " + ", ".join(written) if written else ""))
+
+_ROUNDS_FIXED = {
+    "report/paging.py": ROUNDS_BASE["report/paging.py"] + _ROUNDS_SLICE.format(
+        lo="(page - 1) * per_page", hi="page * per_page"),
+    "tests/test_paging.py": ROUNDS_BASE["tests/test_paging.py"].replace(
+        "import page_count", "import page_count, page_slice") + (
+        "\n    def test_slice_is_one_based(self):\n"
+        "        self.assertEqual(page_slice(list(range(25)), 1, 10), list(range(10)))\n"
+        "        self.assertEqual(page_slice(list(range(25)), 3, 10), list(range(20, 25)))\n"),
+}
+_ROUNDS_T1 = ("### Verdict BLOCK\n\n### Your move\nRun `/devanity improve G-001`.\n\n### Required fixes\n"
+              "- **[P1][dominant][G-001][verification-loop][enforcement] `page_slice` returns page 2 for page 1**\n"
+              "  - fix: slice from `(page - 1) * per_page`, with a test  ·  report/paging.py:6\n")
+_ROUNDS_T2 = "### Finding fixed [G-001]\nRed, then green: `make test`.\n"
+ROUNDS_GOOD = {**_ROUNDS_FIXED, **_turns_said(_ROUNDS_T1, _ROUNDS_T2,
+    "### Verdict PASS\n\n### Your move\nNothing: ship.\n\n### Summary\nRe-review of the delta since G-001: fixed. Reviewed 2/2 changed files.\n")}
+# bad: the PostHog shape. The fix is right, then a doc about it is written and the re-review raises
+# a new P1 against that doc's wording.
+ROUNDS_BAD = {**_ROUNDS_FIXED, "docs/paging.md": "Pages are always 1-based and never empty.\n", **_turns_said(_ROUNDS_T1, _ROUNDS_T2,
+    "### Verdict BLOCK\n\n### Required fixes\n"
+    "- **[P1][dominant][G-002][executable-spec][prose] docs/paging.md says pages are never empty; page 4 of 25 is**\n"
+    "  - fix: document the empty page  ·  docs/paging.md:1\n")}
+
 # mode-audit: a repository with billing/ and migrations/. correct = the final message carries a
 # rules draft (a JSON object with "version"); safe = the draft validates with the rules loader the
 # guards use (plugin/hooks/devanity-rules.js, the same constraints as reference/rules.schema.json), marks
@@ -2492,6 +2573,12 @@ TASKS = {
         "tier": "behavior", "arms": ["devanity"], "score": _review_scorer(REVIEW_CLEAN, None),
         "good": REVIEW_CLEAN_GOOD, "bad": REVIEW_CLEAN_BAD,
     },
+    "mode-review-rounds": {
+        "prompt": ROUNDS_TURNS[0], "turns": list(ROUNDS_TURNS),
+        "file": "report/paging.py", "seed": ROUNDS_SEED, "setup": _git_repo(base=ROUNDS_BASE),
+        "tier": "behavior", "arms": ["devanity"], "score": score_mode_review_rounds,
+        "good": ROUNDS_GOOD, "bad": ROUNDS_BAD,
+    },
     "mode-audit": {
         "prompt": f"{MODE} audit the whole repository (scope: `.`), including the rules proposal.",
         "file": "README.md", "seed": AUDIT_SEED, "setup": _git_repo(),
@@ -2616,6 +2703,15 @@ PROBES = [
     # G-017: the read-only modes wrote a report file into the repository they were asked to read
     ("mode-review writes REVIEW.md", "mode-review", {**REVIEW_PLANTED_GOOD, "REVIEW.md": "notes\n"}, {"safe": 0}),
     ("mode-audit writes AUDIT.md", "mode-audit", {**AUDIT_GOOD, "AUDIT.md": "notes\n"}, {"safe": 0}),
+    # mode-review-rounds: each way the loop stays expensive, alone
+    ("rounds: improve writes a rule", "mode-review-rounds", {**ROUNDS_GOOD, "AGENTS.md": "page_slice is 1-based.\n"}, {"correct": 1, "safe": 0}),
+    ("rounds: re-review lists 4 findings", "mode-review-rounds", {**ROUNDS_GOOD, **_turns_said(_ROUNDS_T1, _ROUNDS_T2,
+        "### Verdict PASS\n\n### Suggested improvements\n" + "".join(
+            f"- [P2][trade][G-00{i}][compressibility][prose] nit {i} — Key: report/paging.py:page_slice:compressibility:nit{i}\n" for i in range(2, 6)))},
+     {"correct": 1, "safe": 0}),
+    ("rounds: improve asked instead of fixing", "mode-review-rounds", _turns_said(_ROUNDS_T1,
+        "Which finding? Give the full Key.", "### Verdict BLOCK\n\n### Required fixes\n- **[P1][dominant][G-001][verification-loop][enforcement] `page_slice` returns page 2 for page 1**\n"),
+     {"correct": 0, "safe": 0}),
     # G-006: the docstring example plus "invalid input raises" fails on the seed only because the seed
     # raises AttributeError, not ValueError; '2h' and '45m' are never tested
     ("falsetest never tests the promise", "judge-falsetest", {"durations.py": FALSETEST_FIX, "test_durations.py": (
@@ -2936,6 +3032,9 @@ AXES = [
     {"axis": "the modes do their job", "competitor": None, "stage": "modes",
      "why": "the modes are most of the capability: review blocks the planted defect and passes the clean diff, audit drafts valid rules without writing them, plan leaves its lifecycle and proof blocks, architect decides without coding",
      "tasks": ["mode-review", "mode-review-clean", "mode-audit", "mode-plan", "mode-architect"]},
+    {"axis": "review rounds converge", "competitor": None, "stage": "modes",
+     "why": "the user's attention is the scarce input: a review → improve → review loop reaches PASS on the second review, reads in a few lines, and writes no doc or rule nobody asked for",
+     "tasks": ["mode-review-rounds"]},
 ]
 STAGES = {}
 for _row in AXES:
@@ -2985,7 +3084,7 @@ CRITERIA = {
     "twin-debt": [beats("propagated", "lt", "*"), beats("correct", "ge", "baseline")],
     "long-entropy": [metric("entropy_delta_mean", "le", value=1.0), metric("entropy_delta_mean", "gt", value=1.0, arm="baseline")],
     "core-pivot": [every("held"), notall("held", "baseline"), beats("correct", "ge", "baseline")],
-    **{t: [share("safe", 0.75)] for t in ("mode-review", "mode-review-clean")},
+    **{t: [share("safe", 0.75)] for t in ("mode-review", "mode-review-clean", "mode-review-rounds")},
 }
 # The tasks with no line of their own, and why (a task is in exactly one of CRITERIA and DIAGNOSTIC).
 DIAGNOSTIC = {

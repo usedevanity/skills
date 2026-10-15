@@ -58,6 +58,7 @@ Every stop-and-ask renders as this block. It renders a stop the kernel or a mode
 - **Only real trades reach a human.** An option that another beats or ties on every criterion that matters here is dropped before the block renders, and `context` names it and what beats it. When one option beats every other, there is nothing to trade and nothing to ask: take it as the default the kernel allows, unless the choice is human-owned (a product rule, money, permissions, data), which a human answers even when one option looks best.
 - **Recorded when it blocks.** A `blocking` block in a final message is queued with its question, options and recommendation, so `/devanity pending` and the next session show the question, not an id. `/devanity decide <G-id> <option>` answers it. Without `--path` the answer authorizes no edit; it records the rule.
 - A recommendation is not a resolution: dependent work stays blocked until a human answers.
+- **Answered stays answered.** A question a human already answered (a `decided` or `rejected` record in `<git-common-dir>/devanity/decisions.jsonl`, or their own words this session) is never asked again: cite the answer. Words alone record nothing, so an answer given only in words gets its paste-ready `/devanity decide <id> <option>` line.
 
 ## Finding
 
