@@ -134,7 +134,7 @@ public API contract             → JSDoc/TSDoc
 several tools                   → AGENTS.md as the source, imported by CLAUDE.md
 ```
 
-Add a doc only when it removes more ambiguity than the context it costs. A doc is **stale** when it names commands that do not exist, contradicts scripts or CI, describes removed APIs, repeats type shapes that changed, conflicts with a closer-scoped instruction, or asserts behavior no test or code backs. JSDoc documents invariants, side effects, fail-open or fail-closed behavior, security, billing and data semantics, and deprecations; never mandate it on trivial exports. A comment that says never, always, must, throws, pure, idempotent or safe needs code or tests that enforce it; otherwise soften it or raise a finding.
+Add a doc only when it removes more ambiguity than the context it costs. A doc states this repository's contract, never a dependency's internals: those change with its version, and every claim about them is one more thing a review must verify. A doc is **stale** when it names commands that do not exist, contradicts scripts or CI, describes removed APIs, repeats type shapes that changed, conflicts with a closer-scoped instruction, or asserts behavior no test or code backs. JSDoc documents invariants, side effects, fail-open or fail-closed behavior, security, billing and data semantics, and deprecations; never mandate it on trivial exports. A comment that says never, always, must, throws, pure, idempotent or safe needs code or tests that enforce it; otherwise soften it or raise a finding.
 
 ## Promotion to enforcement
 
