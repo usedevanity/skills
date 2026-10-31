@@ -10,9 +10,9 @@ Devanity makes a repository able to **accept more AI-generated change without gr
 | Problem | What devanity does |
 | --- | --- |
 | **False-ready:** the agent says "done" or "verified" without evidence | "Verified" exists only in a `devanity-proof` block; the Stop hook re-runs the check the repository declares (never one the agent wrote) against `HEAD` and, when the claim does not hold, blocks the turn with the block it measured |
-| **Usurped authority:** an available tool becomes a permission | high-risk and human-owned decisions stop as a `[DECIDE]`, with the dependent slice left as a failing stub instead of a guessed default; the guard blocks high-risk paths and commands above the session's authority; the reference CI job fails a pull request whose high-risk check fails or that carries no proof block |
+| **Usurped authority:** an available tool becomes a permission | high-risk and irreversible decisions stop as a `[DECIDE][blocking]`, with the dependent slice left as a failing stub instead of a guessed default; the guard blocks high-risk paths and commands above the session's authority; the reference CI job fails a pull request whose high-risk check fails or that carries no proof block |
 | **Wrong rigor:** the same process for a rename and for billing | a proportionality ladder that stops at the first rung that holds, from `NO_CHANGE` to "propose and stop" |
-| **Decision load:** asking what the repository already answers, or deciding what belongs to a human | look for the repository's own answer (ADR, config, sibling) before defaulting; queue what is irreversible or human-owned |
+| **Decision load:** asking what the repository already answers, or deciding what belongs to a human | derive from the principles in the map before asking; a human-owned choice that is reversible before merge is taken on the recommendation, marked `[DECIDE][provisional]`, and judged in batch at review; every answer is a rule written into the map, so the same axis is never asked twice; only the high-risk class and the irreversible block |
 | **Over-build:** speculative abstraction, configuration and scaffolding | a craft ladder: what exists here, then stdlib, platform, installed dependency, one line |
 | **Rules that rot in prose:** conventions nobody enforces | a durability ladder: `audit` proposes moving a recurring rule from prose into a test, lint rule, schema or CI gate, and dropping the prose in the same change |
 | **Pattern inertia:** the agent replicates the repository's debt | reuse behavior through interfaces, never the shape of debt; debt is what the repository's gates say, not taste; `init` and `audit` propose ratchets from the repository's own stack so legacy stays frozen and new code meets the target, and `debt` turns recurring signals into the next proposal |
@@ -36,7 +36,7 @@ Install it once; the kernel applies to every coding turn without being invoked. 
 6. Can't tell?                    → read until you can; then ask ONE thing
 ```
 
-Below rung 3 it writes the minimum that works (what exists here → stdlib → platform → installed dependency → one line). Decisions a reviewer can flip in one line are taken with a stated default; irreversible or human-owned ones become a `[DECIDE]` and stop the dependent slice, not the session. "Verified" exists only inside a `devanity-proof` block filled with what was actually run.
+Below rung 3 it writes the minimum that works (what exists here → stdlib → platform → installed dependency → one line). Decisions a reviewer can flip in one line are taken with a stated default; human-owned ones reversible before merge are taken on the recommendation and marked `[DECIDE][provisional]` for the review; high-risk or irreversible ones become a `[DECIDE][blocking]` and stop the dependent slice, not the session. "Verified" exists only inside a `devanity-proof` block filled with what was actually run.
 
 The verbs are for the moments that need a procedure:
 
@@ -50,7 +50,7 @@ The verbs are for the moments that need a procedure:
 | Turn deferred shortcuts, pending decisions and the ledger's signals into proposed promotions | `/devanity debt` |
 | Make a repository operable: map draft, pinned CI job, first ratchets | `/devanity init` |
 
-With the plugin installed, a few whole-message commands talk to the hooks rather than to the model: `/devanity on|off`, `/devanity status` (state, open change, pending decisions), `/devanity pending`, `/devanity decide <id> <option> [--path <glob>]` (the only command that records a human decision; editing the ledger by hand is the other human path), `/devanity reset` (abandons the open change), and `/devanity debt --stats` for the repository's numbers. What they enforce and record: [`docs/hooks.md`](docs/hooks.md).
+With the plugin installed, a few whole-message commands talk to the hooks rather than to the model: `/devanity on|off`, `/devanity status` (state, open change, pending decisions), `/devanity pending`, `/devanity decide <id> <option> [--path <glob>]` (records a human decision and writes its rule into the map; editing the ledger by hand is the other human path), `/devanity accept [--except <id> <option>, …]` (answers every provisional decision with its recommendation), `/devanity allow <glob> [--standing]` (authorizes edits under a path, for the open change or for good), `/devanity reset` (abandons the open change), and `/devanity debt --stats` for the repository's numbers. What they enforce and record: [`docs/hooks.md`](docs/hooks.md).
 
 You normally **do not invoke Worker or Verifier yourself**: Worker collects evidence and does not decide; Verifier tries to falsify a completed change and does not edit. The modes use them when needed; missing roles degrade explicitly rather than becoming fabricated evidence.
 

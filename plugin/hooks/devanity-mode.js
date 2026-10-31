@@ -21,8 +21,10 @@ const rulesMod = require('./devanity-rules');
 
 // Accepts the bare command and the plugin-scoped form Claude Code may show.
 const COMMAND = /^\/(?:devanity:)?devanity(?:\s+(\S+))?$/;
-// `decide` keeps its arguments' case: matched on the raw prompt, still whole-message.
+// `decide`, `accept` and `allow` keep their arguments' case: matched on the raw prompt, still whole-message.
 const DECIDE = /^\/(?:devanity:)?devanity\s+decide(?:\s+(.*))?$/i;
+const ACCEPT = /^\/(?:devanity:)?devanity\s+accept(?:\s+(.*))?$/i;
+const ALLOW = /^\/(?:devanity:)?devanity\s+allow(?:\s+(.*))?$/i;
 // Argument-less verbs handled here, not by the skill. `pending`, `status` only read the ledger;
 // `reset` writes only contract records with phase ABANDONED (never a decision, never
 // by:'human' on a decision).
@@ -91,10 +93,13 @@ function pendingList(cwd) {
   const str = (v) => (typeof v === 'string' ? v : '');
   const lines = pending.map((d) => {
     const path = str(d.path);
-    const head = `- ${rt.clip(d.id, 40)}${str(d.question) ? `: ${rt.clip(d.question, 300)}` : ''}  path: ${rt.clip(path || '(none)', 120)}  queued by: ${rt.clip(str(d.by) || '?', 20)}  at: ${rt.clip(str(d.ts) || '?', 30)}`;
+    const head = `- ${rt.clip(d.id, 40)}${d.provisional === true ? ' [provisional]' : ''}${str(d.question) ? `: ${rt.clip(d.question, 300)}` : ''}  path: ${rt.clip(path || '(none)', 120)}  queued by: ${rt.clip(str(d.by) || '?', 20)}  at: ${rt.clip(str(d.ts) || '?', 30)}`;
     const rule = path && !loaded.errors.length ? rulesMod.ruleFor(loaded.rules, path) : null;
     const detail = [
+      str(d.axis) && `    axis: ${rt.clip(d.axis, 160)}`,
+      str(d.rule) && `    rule: ${rt.clip(d.rule, 400)}`,
       str(d.question) && `    derivation: ${rt.clip(str(d.derivation) || 'none given', 400)}`,   // what was tried before asking (A2.2)
+      str(d.acted) && `    acted: ${rt.clip(d.acted, 400)}`,
       str(d.options) && `    options: ${rt.clip(d.options, 400)}`,
       str(d.recommendation) && `    recommendation: ${rt.clip(d.recommendation, 400)}`,
       str(d.if_undecided) && `    if undecided: ${rt.clip(d.if_undecided, 400)}`,
@@ -102,7 +107,8 @@ function pendingList(cwd) {
     ].filter(Boolean);
     return [head, ...detail].join('\n');
   });
-  return `DEVANITY PENDING: ${pending.length} decision(s) waiting for a human (record one with \`/devanity decide <id> <option> [--path <glob>]\`):\n${lines.join('\n')}`;
+  const provisional = pending.filter((d) => d.provisional === true).length;
+  return `DEVANITY PENDING: ${pending.length} decision(s) waiting for a human (record one with \`/devanity decide <id> <option> [--path <glob>]\`${provisional ? `; \`/devanity accept [--except <id> <option>, …]\` answers the ${provisional} provisional with their recommendation` : ''}):\n${lines.join('\n')}`;
 }
 
 // `/devanity decide <id> <option> [--path <glob>]`. An unknown id must name what it authorizes.
@@ -111,7 +117,7 @@ const REJECT_PHRASE = /^(?:no way|not now|do not|don't)\b/i;
 // Several answers in one message (A2.3): `G-1 prorate, G-2 usd only --path billing/**`. A comma
 // starts a new answer only when a decision id follows it, so `no, prorate` stays one answer.
 const ID_TOKEN = /^[A-Za-z]{1,2}-\S+$/;
-function decideAll(args, cwd, sessionId) {
+function decideAll(args, cwd, sessionId, opts = {}) {
   const toks = String(args || '').trim().split(/\s+/).filter(Boolean);
   let pathGlob = null;
   const p = toks.indexOf('--path');
@@ -127,10 +133,74 @@ function decideAll(args, cwd, sessionId) {
     if (parts.length && (!a.length || !ID_TOKEN.test(a[0]))) { parts[parts.length - 1].push(',', ...a); continue; }   // not a new answer: the comma was part of the text
     parts.push(a);
   }
-  return parts.map((part) => decide(part, pathGlob, cwd, sessionId)).join('\n');
+  return parts.map((part) => decide(part, pathGlob, cwd, sessionId, opts)).join('\n');
+}
+
+// `/devanity allow <glob> [--standing]`: authority, not a choice. A human names what may be edited,
+// for the open change (the default, as `decide --path`) or for good (`--standing`, never expiring).
+// It is `decide` with a `yes` under an `A-` id, so the one writer of by:'human' stays one.
+function allow(args, cwd, sessionId) {
+  const toks = String(args || '').trim().split(/\s+/).filter(Boolean);
+  const standing = toks.includes('--standing');
+  const glob = toks.find((t) => !t.startsWith('--')) || null;
+  if (!glob) return 'DEVANITY ALLOW: usage is `/devanity allow <glob> [--standing]`.';
+  const id = `A-${glob.split('/')[0].replace(/\.[^.]+$/, '').replace(/[^A-Za-z0-9_-]+/g, '-') || 'path'}`;
+  return decide([id, 'yes'], glob, cwd, sessionId, { standing });
+}
+
+// `/devanity accept [--except <id> <option>, <id> <option>]`: the review batch. Every pending
+// provisional decision is answered with the label its recommendation named; the exceptions are
+// answered as given (a `no` rejects: the slice is reverted by the agent, the rule is not written).
+function accept(args, cwd, sessionId) {
+  if (!ledger.ledgerDir(cwd)) return 'DEVANITY ACCEPT: no ledger here (not a git repository); nothing recorded.';
+  const text = String(args || '').trim();
+  const m = /^(?:--except\s+(.*))?$/s.exec(text);
+  if (!m) return 'DEVANITY ACCEPT: usage is `/devanity accept [--except <id> <option>, <id> <option>]`.';
+  const out = [];
+  const excepted = new Set();
+  if (m[1]) {
+    for (const part of m[1].split(/,\s*(?=[A-Za-z]{1,2}-\S+)/)) {
+      const id = part.trim().split(/\s+/)[0];
+      if (id) excepted.add(id);
+    }
+    out.push(decideAll(m[1], cwd, sessionId));
+  }
+  const provisional = ledger.pendingDecisions(cwd).filter((d) => d.provisional === true && !excepted.has(d.id));
+  for (const d of provisional) {
+    const label = ledger.labelOf(d.options, d.recommendation) || String(d.recommendation || '').trim().split(/[\s,;:!?.]+/)[0];
+    out.push(label ? decide([d.id, label], null, cwd, sessionId, {}) : `DEVANITY ACCEPT: ${rt.clip(d.id, 40)} names no recommendation; answer it with \`/devanity decide ${rt.clip(d.id, 40)} <option>\`.`);
+  }
+  if (!provisional.length && !m[1]) return 'DEVANITY ACCEPT: no provisional decision pending.';
+  return out.join('\n');
+}
+
+// The answer becomes a principle of its area (the eigen step): the `rule:` the block carried, written
+// into the map under the axis's area with `from: [id]`, so the next question on that axis is derived
+// instead of asked. Only a valid map with an entry for the area takes it; anything else is said.
+function writePrinciple(cwd, known, id) {
+  const rule = typeof known.rule === 'string' ? known.rule.trim() : '';
+  if (!rule) return '';
+  const root = rt.gitToplevel(cwd) || cwd;
+  const loaded = rulesMod.loadRules(root);
+  if (!loaded.present || loaded.errors.length || !loaded.raw) return ` The rule is recorded in the ledger only: no valid ${rulesMod.FILE} to write it into.`;
+  const axisArea = typeof known.axis === 'string' ? known.axis.split(/\s*[×x]\s*/)[0].trim() : '';
+  const area = axisArea && loaded.raw.paths && loaded.raw.paths[axisArea] ? axisArea : (typeof known.path === 'string' && known.path ? rulesMod.ruleFor(loaded.rules, known.path).glob : null);
+  if (!area || !loaded.raw.paths || !loaded.raw.paths[area]) return ` The rule is recorded in the ledger only: the map has no entry for ${rt.clip(axisArea || 'its area', 80)}; add one to codify it.`;
+  const entry = loaded.raw.paths[area];
+  const inv = Array.isArray(entry.invariants) ? entry.invariants : (entry.invariants === undefined ? (entry.invariants = []) : null);
+  if (!inv) return ` The rule is recorded in the ledger only: ${rt.clip(area, 80)} has invariants the loader could not read.`;
+  const same = inv.find((v) => (v && typeof v === 'object' ? v.rule : v) === rule);
+  if (same) return ` The map already holds it${same && typeof same === 'object' ? ` as ${same.id}` : ''}.`;
+  let max = 0;
+  for (const p of Object.values(loaded.raw.paths)) for (const v of (Array.isArray(p.invariants) ? p.invariants : [])) { const m = v && typeof v === 'object' ? /^P-(\d+)$/.exec(String(v.id)) : null; if (m && Number(m[1]) > max) max = Number(m[1]); }
+  const pid = `P-${String(max + 1).padStart(3, '0')}`;
+  inv.push({ id: pid, rule, kind: typeof known.decide_kind === 'string' && known.decide_kind ? known.decide_kind : 'rule', from: [id] });
+  if (rulesMod.parseRules(JSON.stringify(loaded.raw)).errors.length) { inv.pop(); return ' The rule is recorded in the ledger only: the map would not validate with it.'; }
+  try { require('fs').writeFileSync(loaded.file, JSON.stringify(loaded.raw, null, 2) + '\n'); } catch (e) { inv.pop(); return ` The rule is recorded in the ledger only: ${rulesMod.FILE} could not be written.`; }
+  return ` Written to the map as ${pid} under ${area}: the next question on that axis is derived, not asked. Commit ${rulesMod.FILE}.`;
 }
 // One answer; the only writer of by:'human' in the plugin (see the note above).
-function decide(toks, pathGlob, cwd, sessionId) {
+function decide(toks, pathGlob, cwd, sessionId, opts = {}) {
   const [id, ...rest] = toks;
   const chosen = rest.join(' ').replace(/\s+,/g, ',');
   if (!id || !chosen) return 'DEVANITY DECIDE: usage is `/devanity decide <id> <option> [--path <glob>]`, or several: `<id> <option>, <id> <option> [--path <glob>]`.';
@@ -144,6 +214,7 @@ function decide(toks, pathGlob, cwd, sessionId) {
   const rejected = REJECT.test(chosen.trim().toLowerCase().replace(/[.!?,;:]+$/, '').split(/[\s,;:!?.]+/)[0] || '') || REJECT_PHRASE.test(chosen.trim());
   const record = { id, status: rejected ? 'rejected' : 'decided', by: 'human', chosen, kind: (known && known.kind) || 'human' };
   if (pathGlob) record.path = pathGlob;
+  if (opts.standing && pathGlob && !rejected) record.standing = true;   // never expires; only a typed `allow --standing` sets it
   // The answer as typed stays in `chosen`; `option` is the offered label it names, when it names
   // exactly one, so `stats` can score the recommendation against it (A0.2).
   const option = !rejected && known ? ledger.labelOf(known.options, chosen) : null;
@@ -151,13 +222,14 @@ function decide(toks, pathGlob, cwd, sessionId) {
   // Scope: the decision serves the open change (and lives as long as it is open), else it expires
   // after ledger.DECISION_TTL_MS; it never authorizes every later session.
   const change = ledger.openContract(cwd);
-  record.contract = change ? change.id : null;   // null, not absent: the ledger merges field by field
+  record.contract = record.standing ? null : (change ? change.id : null);   // null, not absent: the ledger merges field by field
   if (!ledger.append(cwd, 'decisions', record, sessionId)) return 'DEVANITY DECIDE: the ledger could not be written; nothing recorded.';
   const scope = pathGlob || (known && known.path) || null;
-  if (rejected) return `DEVANITY DECISION REJECTED: ${id} = ${chosen}, by human. ${scope ? `Guarded edits under ${scope} stay blocked.` : 'It authorizes no edit.'}`;
-  if (!scope) return `DEVANITY DECISION RECORDED: ${id} = ${chosen}, by human. It records the answer and authorizes no edit; give --path <glob> to authorize edits.`;
-  const lasts = change ? `while change ${change.id} is open` : `for ${Math.round(ledger.DECISION_TTL_MS / 3600000)} h`;
-  return `DEVANITY DECISION RECORDED: ${id} = ${chosen}, path ${scope}, by human. Guarded edits under that path are allowed ${lasts}.`;
+  if (rejected) return `DEVANITY DECISION REJECTED: ${id} = ${chosen}, by human. ${scope ? `Guarded edits under ${scope} stay blocked.` : 'It authorizes no edit.'}${known && known.provisional === true ? ' Revert the provisional slice it names.' : ''}`;
+  const principle = known ? writePrinciple(cwd, known, id) : '';
+  if (!scope) return `DEVANITY DECISION RECORDED: ${id} = ${chosen}, by human. It records the answer and authorizes no edit; \`/devanity allow <glob>\` authorizes edits.${principle}`;
+  const lasts = record.standing ? 'until a human revokes it (standing)' : change ? `while change ${change.id} is open` : `for ${Math.round(ledger.DECISION_TTL_MS / 3600000)} h`;
+  return `DEVANITY DECISION RECORDED: ${id} = ${chosen}, path ${scope}, by human. Guarded edits under that path are allowed ${lasts}.${principle}`;
 }
 
 // ---- open change --------------------------------------------------
@@ -201,9 +273,13 @@ function main() {
       const raw = String(payload.prompt || '').trim();
       const cwd = payload.cwd && String(payload.cwd).trim() ? String(payload.cwd) : process.cwd();
       const d = DECIDE.exec(raw);
+      const a = ACCEPT.exec(raw);
+      const w = ALLOW.exec(raw);
       const intent = intentOf(raw);
-      if (raw) recordTurn(cwd, raw, d ? 'decide' : raw.startsWith('/') ? 'command' : 'message', payload.session_id, d ? String(d[1] || '').trim().split(/\s+/)[0] : null);
+      if (raw) recordTurn(cwd, raw, d || a ? 'decide' : raw.startsWith('/') ? 'command' : 'message', payload.session_id, d ? String(d[1] || '').trim().split(/\s+/)[0] : null);
       if (d) out = decideAll(d[1], cwd, payload.session_id);
+      else if (a) out = accept(a[1], cwd, payload.session_id);
+      else if (w) out = allow(w[1], cwd, payload.session_id);
       else if (intent === 'pending') out = pendingList(cwd);
       else if (intent === 'reset') out = reset(cwd, payload.session_id);
       else if (intent === 'status') out = status(cwd);
