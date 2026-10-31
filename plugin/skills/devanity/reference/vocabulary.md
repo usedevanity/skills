@@ -38,27 +38,27 @@ Before a side effect, name its rung and compare it with the ceiling this session
 
 ## Decision
 
-Every stop-and-ask renders as this block. It renders a stop the kernel or a mode already owes, and never creates one. It hands over the decision space, not the case: someone without this session's context must be able to decide from the block alone.
+Every decision you cannot derive renders as this block. It hands over the rule, not the case: someone without this session's context must be able to decide from the block alone, and the answer must still hold in cases not yet seen.
 
 ```txt
-- **[DECIDE][blocking|dormant][G-###][rule|trade|acceptance|scope|design] Question, one line**
-  - decision: <the rule at stake, in product terms, never the instance>
+- **[DECIDE][blocking|provisional|dormant][G-###][rule|trade|acceptance|scope|design] Question, one line**
+  - axis: <map area> × <slug>
+  - rule: <the sentence the answer instantiates, in product terms, true in cases not yet seen>
   - derivation: <the principle tried (`id: rule` from the map, a decision already made, a sibling), and why it does not decide this; or `none applies`>
   - context: <why it surfaced: one line of evidence> · anchors <G-### or Key>
   - options: <A → durable consequence> · <B → durable consequence> (2–4, one a no-op; only options no other beats)
-  - recommendation: <the pick and its basis: labeled, never applied; `p=<0–1>` after the label, your probability that it is the answer, when you can give one>
+  - recommendation: <the pick and its basis: labeled; `p=<0–1>` after the label, your probability that it is the answer>
+  - acted: <provisional only: the option taken, where (`path:line`), and the one-line change that flips it>
   - if undecided: <the visible fate>
 ```
 
-- **Status.** `blocking` is owed now; `if undecided:` names the fate (the dependent slice stays a failing stub, the verdict holds, it re-fires on the next run). `dormant` may sleep and renders on one line: `- [DECIDE][dormant][G-###][trade] Title — worth doing when <pain observed> — anchors <Key>`. Deciding "defer" turns a blocking decision into a dormant one.
+- **Status.** `blocking` is owed now (kernel: the high-risk class, or irreversible outside the repository) and dependent work stays blocked until a human answers; `if undecided:` names the fate (the dependent slice stays a failing stub, the verdict holds, it re-fires on the next run). `provisional` was acted on: the recommended option is in the code, `acted:` says where and how to flip it, and the human answers at review, in batch; a `no` there reverts that slice and is evidence against the rule, not a case. `dormant` may sleep and renders on one line: `- [DECIDE][dormant][G-###][trade] Title — worth doing when <pain observed> — anchors <Key>`. Deciding "defer" turns a blocking decision into a dormant one.
 - **Kind.** `rule`: a recurring rule or product intent; a yes resolves to `<rule> → codify at <surface>`. `trade`: a fix-class trade (`reference/quality.md`). `acceptance`: someone takes on a risk, either an unfixed P0/P1 or the exposure of an action such as running untrusted code; record who, what, why, expiry and any compensating control. `scope`: what falls inside this unit (routing, a sub-scope, absorbing an unexpected change). `design`: a pick between materially different architectures that rests on product intent, organizational authority, accepted risk or a constraint nobody supplied (`modes/architect.md`). When `trade` and `acceptance` both fit, it is `acceptance`.
-- **Id.** `G-###`, one sequence per session, shared with findings. It is the id a human passes to `/devanity decide <id> <option> --path <glob>`, the only writer of `by: human`. A decision the guard queued keeps its ledger id (`D-…`).
-- **Derive before asking.** A question whose answer a principle in the map, a recorded decision or a sibling already gives is attention wasted: the `derivation:` line names what was tried, so the reader sees the gap, and a `none applies` that recurs is the signal to write the principle (`/devanity debt`).
+- **Axis and id.** The axis (`<map area> × <slug>`) is the durable identity of the question: one axis, one answer, every later case derived. A question whose axis a principle in the map already answers is attention wasted: `derivation:` names what was tried, so the reader sees the gap. `G-###` is the session alias, one sequence shared with findings; a decision the guard or the oracle queued keeps its ledger id (`D-…`, `T-…`, `I-…`).
 - **Anchor, don't repeat.** A decision about a finding cites it and adds only the question, the options, the recommendation and the fate.
-- **Only real trades reach a human.** An option that another beats or ties on every criterion that matters here is dropped before the block renders, and `context` names it and what beats it. When one option beats every other, there is nothing to trade and nothing to ask: take it as the default the kernel allows, unless the choice is human-owned (a product rule, money, permissions, data), which a human answers even when one option looks best.
-- **Recorded when it blocks.** A `blocking` block in a final message is queued with its question, options and recommendation, so `/devanity pending` and the next session show the question, not an id. `/devanity decide <G-id> <option>` answers it. Without `--path` the answer authorizes no edit; it records the rule.
-- A recommendation is not a resolution: dependent work stays blocked until a human answers.
-- **Answered stays answered.** A question a human already answered (a `decided` or `rejected` record in `<git-common-dir>/devanity/decisions.jsonl`, or their own words this session) is never asked again: cite the answer. Words alone record nothing, so an answer given only in words gets its paste-ready `/devanity decide <id> <option>` line.
+- **Only real trades reach a human.** An option that another beats or ties on every criterion that matters here is dropped before the block renders, and `context` names it and what beats it. When one option beats every other, there is nothing to trade: take it as the default the kernel allows, unless the choice is human-owned, which the kernel routes (blocking or provisional) even when one option looks best.
+- **Recorded.** A `blocking` or `provisional` block in a final message is queued with its axis, rule, options and recommendation, so `/devanity pending` and the next session show the question, not an id. `/devanity decide <id> <option>` answers one and writes its `rule:` into the map as a principle of the axis's area (`from: [<id>]`), so it is never asked again; `/devanity accept [--except <id> <option>, …]` answers every provisional with its recommendation. An answer authorizes no edit: `/devanity allow <glob> [--standing]` does.
+- **Answered stays answered.** A question a human already answered (a `decided` or `rejected` record in `<git-common-dir>/devanity/decisions.jsonl`, a principle in the map, or their own words this session) is never asked again: cite the answer. Words alone record nothing, so an answer given only in words gets its paste-ready `/devanity decide <id> <option>` line.
 
 ## Finding
 

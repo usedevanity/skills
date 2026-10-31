@@ -94,14 +94,17 @@ function findContractBlock(text) {
 // a fence closes only on its opener's character, at least as long, alone on the line (CommonMark).
 // A block's fields are the indented lines right under it, up to the next headline: linear in the
 // message, however many headlines it holds.
-const DECIDE_HEAD = /^\s*-\s+\*\*\[DECIDE\]\[(blocking|dormant)\]\[(G-\d{3,})\]\[([a-z]+)\]/;
-const DECIDE_FIELD = /^\s+-\s+(decision|derivation|context|options|recommendation|if undecided):/;
+// Any `<letters>-<token>` id is recorded: a session that numbers its questions `D-111c` instead of
+// `G-001` asked them all the same, and a question the parser drops is calibration lost in silence.
+const DECIDE_HEAD = /^\s*-\s+\*\*\[DECIDE\]\[(blocking|provisional|dormant)\]\[([A-Z]{1,2}-[A-Za-z0-9_.-]{1,40})\]\[([a-z]+)\]/;
+const DECIDE_ANY = /^\s*-\s+\*\*\[DECIDE\]/;   // a headline that reads as a decision but not as the form
+const DECIDE_FIELD = /^\s+-\s+(axis|rule|decision|derivation|context|options|recommendation|acted|if undecided):/;
 const DECIDE_LINE_MAX = 2000;
 const DECIDE_FIELDS_MAX = 10;
 const DECIDE_PER_MESSAGE = 20;   // pending records one message may add; the rest are a flood, not questions
 const FENCE_OPEN = /^\s*(?:(`{3,})[^`]*$|(~{3,}))/;   // a backtick fence's info string holds no backtick
 const FENCE_CLOSE = /^\s*(`{3,}|~{3,})\s*$/;
-function findDecideBlocks(text) {
+function findDecideBlocks(text, onUnparsed) {
   const lines = String(text || '').replace(/\r/g, '').split('\n');
   const out = [];
   let fence = null;
@@ -116,9 +119,8 @@ function findDecideBlocks(text) {
     if (o) { fence = o[1] || o[2]; continue; }
     if (lines[i].length > DECIDE_LINE_MAX) continue;
     const h = DECIDE_HEAD.exec(lines[i]);
-    if (!h) continue;
-    const rest = lines[i].slice(h[0].length).trim();
-    if (!rest.endsWith('**')) continue;
+    const rest = h ? lines[i].slice(h[0].length).trim() : '';
+    if (!h || !rest.endsWith('**')) { if (onUnparsed && DECIDE_ANY.test(lines[i])) onUnparsed(lines[i]); continue; }
     const b = { status: h[1], id: h[2], kind: h[3], question: rt.clip(rest.slice(0, -2), 300) };
     for (let j = i + 1; j < lines.length && j <= i + DECIDE_FIELDS_MAX && /^\s+\S/.test(lines[j]); j++) {
       if (lines[j].length > DECIDE_LINE_MAX) continue;
@@ -140,7 +142,7 @@ function persistDecisions(root, blocks, sid) {
   for (const b of blocks) {
     if (added >= DECIDE_PER_MESSAGE) break;
     // Asked before, pending or answered: a recap never reopens a question a human already answered.
-    if (b.status !== 'blocking' || !b.question || asked.has(b.question)) continue;
+    if (!(b.status === 'blocking' || b.status === 'provisional') || !b.question || asked.has(b.question)) continue;
     // Never append over an id that holds another question or an answer: the latest record per id
     // wins, so reusing it would rewrite a decision a human already made.
     // deferred: no lock, like every ledger write; two Stop hooks in the same instant on one ledger can
@@ -148,8 +150,10 @@ function persistDecisions(root, blocks, sid) {
     // sessions share a ledger in practice (worktrees of one repository do).
     let id = b.id;
     for (let k = 2; ids.has(id); k++) id = `${b.id}-${k}`;
-    const rec = { id, status: 'pending', by: 'agent', kind: 'human', decide_kind: b.kind, question: b.question };
-    for (const k of ['decision', 'derivation', 'context', 'options', 'recommendation', 'if_undecided']) if (b[k]) rec[k] = b[k];
+    // A provisional decision is pending like a blocking one (the human still answers it), acted on
+    // already: `acted` says where, and `/devanity accept` answers the batch with its recommendations.
+    const rec = { id, status: 'pending', by: 'agent', kind: 'human', decide_kind: b.kind, question: b.question, ...(b.status === 'provisional' ? { provisional: true } : {}) };
+    for (const k of ['axis', 'rule', 'decision', 'derivation', 'context', 'options', 'recommendation', 'acted', 'if_undecided']) if (b[k]) rec[k] = b[k];
     if (!ledger.append(root, 'decisions', rec, sid)) break;   // an unwritable ledger fails the same way for the next one
     ids.add(id); asked.add(b.question); added++;
   }
@@ -439,12 +443,16 @@ function decide(payload, env = process.env) {
     : (transcript ? lastAssistantFromTranscript(transcript) : '');
   const found = findProofBlock(message);
   const contract = findContractBlock(message);
-  const decides = findDecideBlocks(message);
-  if (!found && !contract && !decides.length) return { action: 'exit' };
+  let unparsed = 0;
+  const decides = findDecideBlocks(message, () => { unparsed++; });
+  if (!found && !contract && !decides.length && !unparsed) return { action: 'exit' };
   const sid = payload.session_id || null;
   const info = repoInfo(cwd);
   const root = info ? info.root : cwd;
   if (decides.length) persistDecisions(root, decides, sid);
+  // A decision the form did not carry is a question nobody will see: traced, so `stats` and `debt`
+  // can say why answers went unscored, never silently dropped.
+  if (unparsed) ledger.append(root, 'events', { kind: 'decide_unparsed', count: unparsed }, sid);
   // The lifecycle block is persisted first and independently of the proof: a message that only
   // declares a phase records it and lets the turn end.
   if (contract) persistContract(root, contract.fields, sid, agentId);

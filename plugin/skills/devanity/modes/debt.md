@@ -25,6 +25,7 @@ A signal that recurs becomes structure. Cite the records behind every count; nev
 | `blocked` repeated on one class of task | a contract field that class carries from FRAME (the path under `forbidden`, the decision asked up front) |
 | a `deferred:` aging in a top hotspot | a prioritized finding |
 | `stats.principles`: three or more human decisions of one kind under one map area | lane b: a principle for that area, rendered as the `invariants` patch (`{id, rule, kind, from: <the decisions>}`) under a `[DECIDE][rule]`; a principle whose `check` never fired in the ledger is a finding |
+| a `rejected` answer to a `provisional` decision whose `derivation` cited a principle | lane b: that principle is wrong or too wide: its revision under a `[DECIDE][rule]`, never a new case |
 
 Every promotion takes exactly one lane:
 

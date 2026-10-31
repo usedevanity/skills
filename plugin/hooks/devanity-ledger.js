@@ -106,6 +106,7 @@ function pendingDecisions(cwd) {
 // given for is open, or it is younger than DECISION_TTL_MS. The guard never widens this.
 const DECISION_TTL_MS = 24 * 3600 * 1000;
 function inScope(d, open, now = Date.now()) {
+  if (d.standing === true) return true;             // `/devanity allow <glob> --standing`: a human said for good
   if (d.contract) return open.has(d.contract);   // given for a change: lives exactly as long as it is open
   const t = Date.parse(d.ts || '');
   return Number.isFinite(t) && now - t <= DECISION_TTL_MS;
