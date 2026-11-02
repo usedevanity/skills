@@ -1,6 +1,6 @@
 # improve
 
-Load: `reference/vocabulary.md`, `reference/quality.md`, `reference/baseline.md`; `reference/claude-code.md` for an ambiguous reference.
+Load: `reference/vocabulary.md`, `reference/quality.md`, `reference/baseline.md`; `reference/claude-code.md` for an ambiguous reference; `reference/adjudication.md` for the self-review.
 
 Fix one approved unit at a time, on the ladder (`reference/quality.md`): a finding, or one instruction surface. The words after `improve` are the reference; with none, ask. When the human typed `improve <ref>`, that is the approval for that one unit; when you routed here yourself, state how you read the reference and ask before any write. Either way, four exceptions stop for a decision with the proposed patch: the high-risk class (kernel rung 4), a trade, a new dependency, or a hook or CI change.
 
@@ -61,7 +61,7 @@ Fixing G-001 from the audit example. It alters what a billing path returns, so t
   - axis: payments × write-authority
   - rule: a write under `src/payments/**` needs a recorded human decision.
   - derivation: tried the ledger: no human decision covers `src/payments/**` in this change.
-  - context: anchors G-001; the patch sums in integer cents and adds the failing case as a test.
+  - context: G-001's fix writes to a high-risk path · anchors G-001
   - options: authorize → the oracle-first sequence runs and the fix applies · decline → the patch stays a proposal · test only → land the oracle, leave the arithmetic.
   - recommendation: authorize, p=0.9; the failing case is known.
   - if undecided: nothing is written; G-001 re-fires on the next audit.

@@ -1,6 +1,6 @@
 # plan
 
-Load: `reference/vocabulary.md` (Change, Evidence, Decision, Authority, Target identity).
+Load: `reference/vocabulary.md` (Change, Evidence, Decision, Authority, Target identity); `agents/verifier.md` for the VERIFY brief.
 
 Carry one Change from a goal to a verified candidate. The goal is the words after `plan`; with none, ask for it and stop.
 
