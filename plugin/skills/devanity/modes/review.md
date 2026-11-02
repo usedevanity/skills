@@ -15,7 +15,7 @@ Judge the current diff before it lands. Read-only: nothing outlives the reply un
 5. **Judge.** Cover each relevant dimension (`reference/quality.md`, relevance and sufficiency), the instruction syndromes on instruction surfaces, basis-form drift in both directions, and reconciliation of the rules the diff touches (`reference/baseline.md`). For a surface written this session, run the self-review (`reference/quality.md`).
 6. **Plan drift.** If a `/devanity plan` Change from this session covers the diff, compare what was delivered with its scope, non-goals and slices. An undeclared deviation is a finding: scope creep or a stale plan, judged on the evidence.
 7. **Conformance.** Check the diff against every accepted ADR or architecture decision that governs a touched path, and against the `invariants` of each touched path in `devanity.rules.json`; quote the record. A violation is a finding tagged by the cause it breaks; an altered invariant of a `core` path with no accepted shape or ADR behind it is one. A record whose `revise_when` has fired is not a violation: route it to `/devanity architect`.
-8. **Render** per `reference/vocabulary.md`: first `### Your move`, at most three plain lines on what the human does next (which fixes, the paste-ready `/devanity decide <id> <option>` line for each answer owed, or `nothing: ship`); then the findings; a decision for each owed stop (an unaccepted P0, and each P0/P1 whose fix is a trade); missing verification; a correction prompt.
+8. **Render** per `reference/vocabulary.md`: the verdict, then `### Your move`, at most three plain lines on what the human does next (which fixes, the paste-ready `/devanity decide <id> <option>` line for each answer owed, or `nothing: ship`); then the findings; a decision for each owed stop (an unaccepted P0, and each P0/P1 whose fix is a trade); missing verification; a correction prompt.
 9. **PR package**, on a PASS-class verdict only: a title, a description sourced from the Summary, the verification evidence (with the change's `devanity-proof` block first, when it has one), and reviewer focus (risks and non-goals). Prepare the PR; never approve it.
 
 ## Output
@@ -62,11 +62,12 @@ Deep (high-risk domain) · check: `pnpm test --filter auth` → 12 passed, no si
 
 ### Decisions
 - **[DECIDE][blocking][G-003][acceptance] Ship the delete route without permission tests?**
-  - decision: whether unverified permission behavior may ship; a risk acceptance, not a technical choice.
+  - axis: auth × untested-gate
+  - rule: a permission gate ships tested, or with a recorded acceptance.
   - derivation: none applies; no principle or accepted risk covers an untested permission gate.
   - context: anchors G-001; high-risk class, guarded today only by human review.
   - options: decline → add the tests, re-run review · accept → PASS_WITH_ACCEPTED_RISK, with who, why, expiry and a compensating control recorded.
-  - recommendation: decline; the fix is one file, cheaper than the recorded risk.
+  - recommendation: decline, p=0.8; the fix is one file, cheaper than the recorded risk.
   - if undecided: the verdict stays BLOCK and re-fires on the next review of this diff.
 
 ### Missing verification

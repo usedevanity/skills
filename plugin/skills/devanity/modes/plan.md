@@ -80,7 +80,7 @@ An agent, mode or check that is not available in this session degrades to a visi
 
 ### ASSURE
 
-- Put the `devanity-proof` block first in the PR body or handoff, so the reviewer reads the proof before the diff. The reference CI job (`scripts/devanity-rules-ci.mjs`) refuses a rung-3+ PR without it.
+- Put the `devanity-proof` block first in the PR body or handoff, so the reviewer reads the proof before the diff. The reference CI job (`${CLAUDE_PLUGIN_ROOT}/scripts/devanity-rules-ci.mjs`) refuses a rung-3+ PR without it.
 - A material change then runs `/devanity review` on its diff (a trivial diff takes review's fast path). The candidate is not ready while required review findings are open.
 - `### Assumptions` in the PR body or handoff: every `provisional` decision, least confident first, each on one line with its `acted:`, so the reviewer answers the batch where the diff is (`/devanity accept [--except …]`). A mechanically decidable rule goes to a check before prose.
 

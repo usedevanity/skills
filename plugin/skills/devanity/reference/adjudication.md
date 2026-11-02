@@ -24,7 +24,7 @@ NOT_ADJUDICATED: <what the contract asked that you could not judge, and why, or 
 - CLEAN: every check in the contract ran and none fired.
 - NOT_ADJUDICATED: nothing fired and something could not be judged.
 
-Several apply → the most severe: FINDINGS > NOT_ADJUDICATED > CLEAN. The NOT_ADJUDICATED line renders in every run; the verdict of that name fires only when that line is not empty and no check fired. Aliases are `C-###`: the caller folds what it adopts by `dimension:rule`, composes each `fix:` under its own Finding format, and renumbers; the Key is the identity that crosses over.
+Several apply → the most severe: FINDINGS > NOT_ADJUDICATED > CLEAN. The NOT_ADJUDICATED line renders in every run; the verdict of that name fires only when that line is not `none` and no check fired. Aliases are `C-###`: the caller folds what it adopts by `dimension:rule`, composes each `fix:` under its own Finding format, and renumbers; the Key is the identity that crosses over.
 
 ## Rules
 

@@ -42,7 +42,7 @@ A menu is the `AskUserQuestion` tool. It is only ever the projection of an emitt
 
 ## Fresh-context pass
 
-Pass `reference/adjudication.md` verbatim as the whole prompt, plus the surface paths, the syndrome set, and each tag vocabulary with its path. Never add why the surface is written as it is. Use the highest rung available and name it in the output:
+Pass `reference/adjudication.md` verbatim, then the surface paths, the syndrome set, and each tag vocabulary with its path. Never add why the surface is written as it is. Use the highest rung available and name it in the output:
 
 1. **A read-only subagent type** (`Explore`, `Plan`): writes are impossible; commands stay prompt-held, and its own system prompt competes with the contract.
 2. **The general-purpose subagent**: no session history, which is what matters; writes stay prompt-held.
