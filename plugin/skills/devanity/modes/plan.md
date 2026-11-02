@@ -1,6 +1,6 @@
 # plan
 
-Load: `reference/vocabulary.md` (Change, Evidence, Decision, Authority, Target identity).
+Load: `reference/vocabulary.md` (Change, Evidence, Decision, Authority, Target identity); `agents/verifier.md` for the VERIFY brief.
 
 Carry one Change from a goal to a verified candidate. The goal is the words after `plan`; with none, ask for it and stop.
 
@@ -55,7 +55,6 @@ Count both failures. `false-ready`: code later needs a decision, a scope jump, a
 ### EXECUTE
 
 Implement one dependency-respecting slice at a time: `id · depends_on · expected_files · expected_delta · forbidden_delta · proof_obligations`. After each slice: inspect the real delta → run its focused proof → compare it with the expected and forbidden delta → bind the evidence to the current target → continue, correct or stop.
-
 A milestone is a parent Change whose slices are child Changes, each with its own phase record naming `parent:`, run as a gated node: the `implementer` in its worktree, closed by the oracle when it stops. Children run in parallel only when there is no dependency between them, their map areas are disjoint (one writer per area; a shared area runs in series), they share no state or ordering, and each has its own proof. Available agents are not a reason. A child repairs within its intent and scope; replanning goes through the parent.
 
 Stop the slice and return to INSPECT, or to a decision, when:
@@ -81,7 +80,7 @@ An agent, mode or check that is not available in this session degrades to a visi
 
 ### ASSURE
 
-- Put the `devanity-proof` block first in the PR body or handoff, so the reviewer reads the proof before the diff. The reference CI job (`scripts/devanity-rules-ci.mjs`) refuses a rung-3+ PR without it.
+- Put the `devanity-proof` block first in the PR body or handoff, so the reviewer reads the proof before the diff. The reference CI job (`${CLAUDE_PLUGIN_ROOT}/scripts/devanity-rules-ci.mjs`) refuses a rung-3+ PR without it.
 - A material change then runs `/devanity review` on its diff (a trivial diff takes review's fast path). The candidate is not ready while required review findings are open.
 - `### Assumptions` in the PR body or handoff: every `provisional` decision, least confident first, each on one line with its `acted:`, so the reviewer answers the batch where the diff is (`/devanity accept [--except …]`). A mechanically decidable rule goes to a check before prose.
 

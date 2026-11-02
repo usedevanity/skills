@@ -1,8 +1,8 @@
 # improve
 
-Load: `reference/vocabulary.md`, `reference/quality.md`, `reference/baseline.md`; `reference/claude-code.md` for an ambiguous reference.
+Load: `reference/vocabulary.md`, `reference/quality.md`, `reference/baseline.md`; `reference/claude-code.md` for an ambiguous reference; `reference/adjudication.md` for the self-review.
 
-Fix exactly one approved unit, on the ladder (`reference/quality.md`): a finding, or one instruction surface. The words after `improve` are the reference; with none, ask. When the human typed `improve <ref>`, that is the approval for that one unit; when you routed here yourself, state how you read the reference and ask before any write. Either way, four exceptions stop for a decision with the proposed patch: the high-risk class (kernel rung 4), a trade, a new dependency, or a hook or CI change.
+Fix one approved unit at a time, on the ladder (`reference/quality.md`): a finding, or one instruction surface. The words after `improve` are the reference; with none, ask. When the human typed `improve <ref>`, that is the approval for that one unit; when you routed here yourself, state how you read the reference and ask before any write. Either way, four exceptions stop for a decision with the proposed patch: the high-risk class (kernel rung 4), a trade, a new dependency, or a hook or CI change.
 
 Several references in one invocation (`improve G-001 G-004`, or "the required fixes" of this session's last review: its open P0/P1, never its P2/P3) are several units, run in severity order, each with its own oracle. A unit that hits an exception stops alone; the rest proceed.
 
@@ -58,17 +58,18 @@ Fixing G-001 from the audit example. It alters what a billing path returns, so t
 
 ```md
 - **[DECIDE][blocking][G-005][acceptance] Authorize the cents fix to `sumLineItems`?**
-  - decision: whether this run may write to the billing path.
-  - derivation: tried the ledger: no human decision covers `billing/**` in this change.
-  - context: anchors G-001; the patch sums in integer cents and adds the failing case as a test.
+  - axis: payments × write-authority
+  - rule: a write under `src/payments/**` needs a recorded human decision.
+  - derivation: tried the ledger: no human decision covers `src/payments/**` in this change.
+  - context: G-001's fix writes to a high-risk path · anchors G-001
   - options: authorize → the oracle-first sequence runs and the fix applies · decline → the patch stays a proposal · test only → land the oracle, leave the arithmetic.
-  - recommendation: authorize; the failing case is known, and the oracle lands with the fix.
+  - recommendation: authorize, p=0.9; the failing case is known.
   - if undecided: nothing is written; G-001 re-fires on the next audit.
 ```
 
 Once authorized:
 
-```md
+````md
 ### Finding fixed [G-001] (Key: src/payments/totals.ts:sumLineItems:verification-loop:float-money)
 
 ### Ladder rung targeted enforcement
@@ -83,7 +84,7 @@ The prose rule "money integers" is now a test: a float sum fails a check instead
 dominant (checked: the oracle failed on the defect before the fix existed; no API or dependency change; one test file in a suite that already runs; de minimis, named)
 
 ### Verification command / result
-`pnpm test --filter payments`, twice. Red, oracle only: 1 failed, `sumLineItems([10.10, 20.20, 30.30])` returned `60.599999999999994`. Green, after the fix: 6 passed. Captures around both runs: the delta matched the expected set (`totals.test.ts`, then `totals.ts`), and the diff hash changed only across the edits: no verification side effect.
+`pnpm test --filter payments`, twice. Red, oracle only: 1 failed, `sumLineItems([10.10, 20.20, 30.30])` returned `60.599999999999994`. Green, after the fix: 6 passed. Captures around both runs: the delta matched the expected set (`totals.test.ts`, then `totals.ts`), and the diff hash changed only across the edits: no verification side effect. Verifier: 3/3 probes.
 
 ### Residual risk
 Other modules may still do float money math; raised as a follow-up finding, not fixed here.
@@ -92,11 +93,13 @@ Other modules may still do float money math; raised as a follow-up finding, not 
 The proof block below, then: "Fix float money arithmetic in sumLineItems; add cents-based tests."
 
 ### Proof
+```
 devanity-proof:
   check: pnpm test --filter payments
   failed_before: yes
   passed_after: yes
-  probes: 0/0
+  probes: 3/3
   status: VERIFIED
   pending: 0
 ```
+````
