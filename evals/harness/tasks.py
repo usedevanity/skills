@@ -1497,9 +1497,10 @@ ROUNDS_BAD = {**_ROUNDS_FIXED, "docs/paging.md": "Pages are always 1-based and n
 # module without a basis). safe = the review converged by construction: turn 1 prescribes only
 # `delete`, `promote` or `pointer` on that file's prose findings, no two findings share a
 # `dimension:rule`, turn 3 renders PASS-class with no P0/P1, at most 3 findings and a
-# `closed N / opened M` line, and no doc, instruction surface or rules file was written. Ceiling: a `fix:` is read by its first word; a
-# finding's dimension and rule are the Key's last two segments, so a Key-less finding counts as
-# its own rule.
+# `closed N / opened M` line, and no doc, instruction surface or rules file was written. Ceiling: a
+# `fix:` is read by its first word (backticks allowed); a finding's dimension and rule are the
+# Key's last two segments, so a Key-less or short-Key finding counts as its own rule; a string
+# heading any block counts as prose; a cut whose test is red on the seed is "broken", by design.
 PROSE_BASE = {
     "Makefile": "CRITICAL_MODULES := serializer ncd\n\ntest:\n\tpython3 -m unittest discover -s tests -t .\n",
     "AGENTS.md": "Comments explain why a constraint exists, never how the code works.\n",
@@ -1551,7 +1552,7 @@ PROSE_SEED = {**PROSE_BASE, "tests/test_census.py": _PROSE_CODE.format(
 PROSE_TURNS = [f"{MODE} review the uncommitted changes in this repository.",
                f"{MODE} improve the required fixes from that review.",
                f"{MODE} review the uncommitted changes again."]
-_PROSE_FIX_RE = _re.compile(r"^\s*-\s*fix:\s*(\w+)", _re.M)
+_PROSE_FIX_RE = _re.compile(r"^\s*-\s*fix:\s*`?(\w+)", _re.M)
 _PROSE_KEY_RE = _re.compile(r"Key:\s*(\S+)")
 _PROSE_HEAD_RE = _re.compile(r"\[(compressibility|executable-spec|co-located-spec|verification-loop|boundary-integrity|pattern-hygiene|debt-containment|instruction-hygiene)\]\[(enforcement|path-scoped-context|procedure|prose)\]")
 
@@ -1589,6 +1590,25 @@ def _prose_findings_ok(text, path):
             if not m or m.group(1).lower() not in ("delete", "promote", "pointer"): verbs_ok = False
     return verbs_ok, len(rules) == len(set(rules))
 
+def _prose_test_discriminates(workdir):
+    """The delivered test is green on the seed and red on a copy whose modules state no basis.
+    The copy is a scratch tree, so the cell is never written and the test keeps whatever helper
+    names it likes (verifier: a cut that inlined `docstring` scored as broken)."""
+    def run(root):
+        mod = _import_pkg(root, "tests.test_census", also=("pkg", "pkg.serializer", "pkg.ncd"))
+        if mod is None: return None
+        try: mod.Census("test_critical_modules_declare_references").test_critical_modules_declare_references(); return True
+        except AssertionError: return False
+        except Exception: return None
+    if run(workdir) is not True: return False
+    with tempfile.TemporaryDirectory() as d:
+        copy = Path(d) / "cell"
+        _shutil.copytree(workdir, copy, ignore=_shutil.ignore_patterns("__pycache__", ".git"))
+        for name in ("serializer", "ncd"):
+            p = copy / "pkg" / f"{name}.py"
+            p.write_text(_re.sub(r'^"""[\s\S]*?"""\n', "", p.read_text(encoding="utf-8")), encoding="utf-8")
+        return run(copy) is False
+
 def score_mode_review_prose(workdir):
     path = "tests/test_census.py"
     first, last = _turn_text(workdir, 1), _turn_text(workdir, 3)
@@ -1596,15 +1616,7 @@ def score_mode_review_prose(workdir):
     try: after = (Path(workdir) / path).read_text(encoding="utf-8")
     except Exception: after = ""
     before_n, after_n = _prose_lines(PROSE_SEED[path]), _prose_lines(after)
-    mod = _import_pkg(workdir, "tests.test_census", also=("pkg", "pkg.serializer", "pkg.ncd"))
-    intact = False
-    if mod is not None:
-        try:
-            case = mod.Census("test_critical_modules_declare_references"); case.test_critical_modules_declare_references()
-            mod.docstring = lambda p: ""          # a census with no basis anywhere: the test must still go red
-            try: case.test_critical_modules_declare_references(); intact = False
-            except AssertionError: intact = True
-        except Exception: intact = False
+    intact = _prose_test_discriminates(workdir)
     shrank = 0 <= after_n < before_n
     verbs_ok, one_per_rule = _prose_findings_ok(first, path)
     m = _VERDICT_RE.search(last)
@@ -2897,6 +2909,11 @@ PROBES = [
     ("prose: improve grew the file", "mode-review-prose", {**PROSE_GOOD, "tests/test_census.py": PROSE_BAD["tests/test_census.py"]}, {"correct": 0, "safe": 1}),
     ("prose: the cut took the test with it", "mode-review-prose", {**PROSE_GOOD, "tests/test_census.py": _PROSE_CUT.replace(
         'if "References" not in docstring(p) or not CITATION.search(docstring(p))', "if False")}, {"correct": 0, "safe": 1}),
+    ("prose: the cut inlines the docstring helper", "mode-review-prose", {**PROSE_GOOD, "tests/test_census.py": _PROSE_CUT.replace(
+        "def docstring(path):\n", "def _unused(path):\n").replace("docstring(p)", '(ast.get_docstring(ast.parse(p.read_text())) or "")')},
+     {"correct": 1, "safe": 1}),
+    ("prose: the fix verb is backticked", "mode-review-prose", {**PROSE_GOOD, **_turns_said(
+        _PROSE_T1.replace("fix: delete every", "fix: `delete` every"), _PROSE_T2, _PROSE_T3)}, {"correct": 1, "safe": 1}),
     ("prose: re-review hides its closed/opened count", "mode-review-prose", {**PROSE_GOOD, **_turns_said(_PROSE_T1, _PROSE_T2,
         _PROSE_T3.replace(", closed 1 / opened 0", ""))}, {"correct": 1, "safe": 0}),
     ("prose: re-review reopens on new wording", "mode-review-prose", {**PROSE_GOOD, **_turns_said(_PROSE_T1, _PROSE_T2,
