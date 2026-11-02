@@ -54,7 +54,7 @@ Count both failures. `false-ready`: code later needs a decision, a scope jump, a
 
 ### EXECUTE
 
-Implement one dependency-respecting slice at a time: `id · depends_on · expected_files · expected_delta · forbidden_delta · proof_obligations`. After each slice: inspect the real delta → run its focused proof → compare it with the expected and forbidden delta → bind the evidence to the current target → continue, correct or stop.
+Implement one dependency-respecting slice at a time: `id · depends_on · expected_files · expected_delta · forbidden_delta · proof_obligations`. After each slice: inspect the real delta → run its focused proof → compare it with the expected and forbidden delta → bind the evidence to the current target → continue, correct or stop. A review finding on the slice is corrected here, never routed to `improve`.
 
 A milestone is a parent Change whose slices are child Changes, each with its own phase record naming `parent:`, run as a gated node: the `implementer` in its worktree, closed by the oracle when it stops. Children run in parallel only when there is no dependency between them, their map areas are disjoint (one writer per area; a shared area runs in series), they share no state or ordering, and each has its own proof. Available agents are not a reason. A child repairs within its intent and scope; replanning goes through the parent.
 

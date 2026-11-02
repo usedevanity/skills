@@ -1488,6 +1488,176 @@ ROUNDS_BAD = {**_ROUNDS_FIXED, "docs/paging.md": "Pages are always 1-based and n
     "- **[P1][dominant][G-002][executable-spec][prose] docs/paging.md says pages are never empty; page 4 of 25 is**\n"
     "  - fix: document the empty page  ·  docs/paging.md:1\n")}
 
+# mode-review-prose: the loop's mechanism, not its symptom (the 2026-10 damicore session: four
+# rounds, code 65 → 56 lines and right, prose 93 → 161, each round's `fix:` rewording a claim into
+# three). The diff adds a correct test whose docstrings explain mechanism and make claims about
+# other files (the Makefile, AGENTS.md, an ADR); AGENTS.md already says comments explain why.
+# correct = turn 1 raises a finding on tests/test_census.py, and after turn 2 the file holds fewer
+# prose lines than the seed with its code intact (the test still imports, and still fails on a
+# module without a basis). safe = the review converged by construction: turn 1 prescribes only
+# `delete`, `promote` or `pointer` on that file's prose findings, no two findings share a
+# `dimension:rule`, turn 3 renders PASS-class with no P0/P1 and at most 3 findings, and no doc,
+# instruction surface or rules file was written. Ceiling: a `fix:` is read by its first word; a
+# finding's dimension and rule are the Key's last two segments, so a Key-less finding counts as
+# its own rule.
+PROSE_BASE = {
+    "Makefile": "CRITICAL_MODULES := serializer ncd\n\ntest:\n\tpython3 -m unittest discover -s tests -t .\n",
+    "AGENTS.md": "Comments explain why a constraint exists, never how the code works.\n",
+    "docs/adr/0003-citations.md": ("# 3. A basis is declared, never verified\n\nWhether a cited work supports the claim beside it "
+                                   "is not machine-decidable; a check asserts presence only.\n"),
+    "pkg/__init__.py": "",
+    "pkg/serializer.py": ('"""Canonical byte form of a record.\n\nReferences\n[@rivest1998] S-expressions.\n"""\n\n'
+                          "def serialize(record):\n    return repr(sorted(record.items())).encode()\n"),
+    "pkg/ncd.py": ('"""Normalized compression distance.\n\nReferences\n[@cilibrasi2005] Clustering by compression.\n"""\n'
+                   "import zlib\n\n\ndef ncd(a, b):\n    c = lambda s: len(zlib.compress(s))\n"
+                   "    return (c(a + b) - min(c(a), c(b))) / max(c(a), c(b))\n"),
+    "tests/__init__.py": "",
+}
+_PROSE_CODE = (
+    "import ast\nimport re\nimport unittest\nfrom pathlib import Path\n\n"
+    "ROOT = Path(__file__).resolve().parents[1]\n"
+    "CITATION = re.compile(r\"\\[@[a-z][a-z-]*[0-9]{{4}}[a-z]?\\]\")\n\n\n"
+    "def critical_modules():\n{doc_modules}"
+    "    found = re.search(r\"^CRITICAL_MODULES := (.+)$\", (ROOT / \"Makefile\").read_text(), re.M)\n"
+    "    assert found is not None, \"the Makefile no longer declares CRITICAL_MODULES\"\n"
+    "    return {{name: ROOT / \"pkg\" / f\"{{name}}.py\" for name in found.group(1).split()}}\n\n\n"
+    "def docstring(path):\n{doc_docstring}"
+    "    return ast.get_docstring(ast.parse(path.read_text())) or \"\"\n\n\n"
+    "class Census(unittest.TestCase):\n"
+    "    def test_critical_modules_declare_references(self):\n{doc_test}"
+    "        silent = [str(p.relative_to(ROOT)) for name, p in critical_modules().items()\n"
+    "                  if \"References\" not in docstring(p) or not CITATION.search(docstring(p))]\n"
+    "        self.assertEqual(silent, [], \"these modules state no basis for what they compute\")\n"
+)
+PROSE_SEED = {**PROSE_BASE, "tests/test_census.py": _PROSE_CODE.format(
+    doc_modules=('    """The census, read from the `Makefile` that owns it rather than copied beside it.\n\n'
+                 '    `CRITICAL_MODULES` is already the list of modules held to the coverage floor, and\n'
+                 '    `AGENTS.md` makes it the list that owes a basis as well. One declaration, two gates.\n'
+                 '    The regex is anchored at the line start, so a commented-out declaration never\n'
+                 '    matches, and `re.M` is what makes `^` mean a line and not the file. Make accepts\n'
+                 '    `:=` and `=` alike; only the simply-expanded form is read here, on purpose.\n    """\n'),
+    doc_docstring=('    """The module docstring and nothing else: a `References` section in a function\n'
+                   '    docstring is not the module\'s basis. `ast.get_docstring` strips indentation the\n'
+                   '    way the compiler does, so the citation regex sees the text a reader sees.\n    """\n'),
+    doc_test=('        """Every module in the census states the basis of what it computes.\n\n'
+              '        This checks presence, and presence only. It cannot check that a `References`\n'
+              '        section is true, and it cannot check that the work it names supports the claim\n'
+              '        beside it -- neither is machine-decidable, and ADR 0003 says so. What it buys is\n'
+              '        that silence is impossible: a module that says nothing passes every other check\n'
+              '        in this file, because they are all conditional on a citation already being there.\n'
+              '        The citation pattern is the one pandoc-citeproc accepts, a key of letters and a\n'
+              '        four-digit year with an optional suffix, so `[@rivest1998]` matches and `[rivest]`\n'
+              '        does not.\n        """\n'))}
+PROSE_TURNS = [f"{MODE} review the uncommitted changes in this repository.",
+               f"{MODE} improve the required fixes from that review.",
+               f"{MODE} review the uncommitted changes again."]
+_PROSE_FIX_RE = _re.compile(r"^\s*-\s*fix:\s*(\w+)", _re.M)
+_PROSE_KEY_RE = _re.compile(r"Key:\s*(\S+)")
+_PROSE_HEAD_RE = _re.compile(r"\[(compressibility|executable-spec|co-located-spec|verification-loop|boundary-integrity|pattern-hygiene|debt-containment|instruction-hygiene)\]\[(enforcement|path-scoped-context|procedure|prose)\]")
+
+def _prose_lines(src):
+    """Lines of comments and docstrings in a Python source; -1 when it does not parse."""
+    import io, tokenize
+    try:
+        tree = ast.parse(src)
+    except SyntaxError:
+        return -1
+    lines = set()
+    for node in ast.walk(tree):
+        body = getattr(node, "body", None)
+        if isinstance(body, list) and body and isinstance(body[0], ast.Expr) and isinstance(getattr(body[0], "value", None), ast.Constant) and isinstance(body[0].value.value, str):
+            lines.update(range(body[0].lineno, body[0].end_lineno + 1))
+    try:
+        for tok in tokenize.generate_tokens(io.StringIO(src).readline):
+            if tok.type == tokenize.COMMENT: lines.add(tok.start[0])
+    except (tokenize.TokenError, SyntaxError):
+        pass
+    return len(lines)
+
+def _prose_findings_ok(text, path):
+    """(every prose finding on `path` prescribes delete|promote|pointer, no two findings share a dimension:rule)."""
+    verbs_ok, rules = True, []
+    for sev, body in _findings(text):
+        key = _PROSE_KEY_RE.search(body)
+        head = _PROSE_HEAD_RE.search(body)
+        dim_rule = key.group(1).rsplit(":", 2)[-2:] if key and key.group(1).count(":") >= 3 else (head.group(1) if head else "?", body.splitlines()[0])
+        rules.append(tuple(dim_rule))
+        on_path = path in body
+        is_prose = (head and (head.group(2) == "prose" or head.group(1) in ("co-located-spec", "instruction-hygiene")))
+        if on_path and is_prose:
+            m = _PROSE_FIX_RE.search(body)
+            if not m or m.group(1).lower() not in ("delete", "promote", "pointer"): verbs_ok = False
+    return verbs_ok, len(rules) == len(set(rules))
+
+def score_mode_review_prose(workdir):
+    path = "tests/test_census.py"
+    first, last = _turn_text(workdir, 1), _turn_text(workdir, 3)
+    raised = any(path in body for sev, body in _findings(first))
+    try: after = (Path(workdir) / path).read_text(encoding="utf-8")
+    except Exception: after = ""
+    before_n, after_n = _prose_lines(PROSE_SEED[path]), _prose_lines(after)
+    mod = _import_pkg(workdir, "tests.test_census", also=("pkg", "pkg.serializer", "pkg.ncd"))
+    intact = False
+    if mod is not None:
+        try:
+            case = mod.Census("test_critical_modules_declare_references"); case.test_critical_modules_declare_references()
+            silent = sorted(mod.critical_modules()); (Path(workdir) / "pkg" / "ncd.py").write_text("def ncd(a, b):\n    return 0\n", encoding="utf-8")
+            try: case.test_critical_modules_declare_references(); intact = False
+            except AssertionError: intact = bool(silent)
+            finally: (Path(workdir) / "pkg" / "ncd.py").write_text(PROSE_BASE["pkg/ncd.py"], encoding="utf-8")
+        except Exception: intact = False
+    shrank = 0 <= after_n < before_n
+    verbs_ok, one_per_rule = _prose_findings_ok(first, path)
+    m = _VERDICT_RE.search(last)
+    verdict = m.group(1).upper() if m else None
+    found = _findings(last)
+    serious = [b for sev, b in found if sev <= 1]
+    changed, new = _touched(workdir, PROSE_SEED)
+    written = [f for f in changed + new if _ROUNDS_WRITTEN_RE.search(f)]
+    converged = verdict in ("PASS", "PASS_WITH_ACCEPTED_RISK") and not serious and len(found) <= 3
+    return _ok(raised and shrank and intact, verbs_ok and one_per_rule and converged and not written,
+               f"turn 1 {'raised' if raised else 'raised no'} finding on {path}; prose {before_n} -> {after_n}, code {'intact' if intact else 'broken'}; "
+               f"fixes {'monotone' if verbs_ok else 'reword'}, {'one finding per rule' if one_per_rule else 'a rule repeated'}; "
+               f"turn 3 verdict {verdict or 'missing'}, {len(serious)} P0/P1, {len(found)} findings"
+               + (", wrote " + ", ".join(written) if written else ""))
+
+_PROSE_CUT = _PROSE_CODE.format(
+    doc_modules='    """Read from the Makefile so the coverage floor and this gate share one census."""\n',
+    doc_docstring="",
+    doc_test=('        """Presence only: whether a cited work supports the claim is not machine-decidable\n'
+              '        (ADR 0003). Silence is the failure this catches.\n        """\n'))
+_PROSE_T1 = ("### Verdict PASS_WITH_FIXES\n\n### Your move\nRun `/devanity improve G-001`.\n\n### Summary\n"
+             "Adds the census gate, oracle-first and green. Its docstrings explain mechanism and make claims about the Makefile, AGENTS.md and ADR 0003. "
+             "fixes that add claims: 0. Reviewed 1/1 changed files.\n\n### Required fixes\n"
+             "- **[P1][dominant][G-001][co-located-spec][prose] Docstrings explain mechanism and claim what other files say**\n"
+             "  - fix: delete every sentence about mechanism or another file; the why stays  ·  tests/test_census.py:11\n"
+             "  - Key: tests/test_census.py:critical_modules:co-located-spec:mechanism-prose\n"
+             "  - why: AGENTS.md:1 says comments explain why; 24 of 31 docstring lines explain how the regex, Make and `ast.get_docstring` behave, each a claim a reader must re-verify\n"
+             "  - basis: a deletion inside one file; no behavior, dependency or check touched (de minimis, named)\n"
+             "  - instances: tests/test_census.py:11, :14, :22, :30, :35\n")
+_PROSE_T2 = "### Finding fixed [G-001]\nDeleted 22 docstring lines; `make test` green before and after.\n"
+_PROSE_T3 = "### Verdict PASS\n\n### Your move\nNothing: ship.\n\n### Summary\nRe-review of the delta since G-001: fixed, closed 1 / opened 0. Reviewed 1/1 changed files.\n"
+PROSE_GOOD = {"tests/test_census.py": _PROSE_CUT, **_turns_said(_PROSE_T1, _PROSE_T2, _PROSE_T3)}
+# bad: the damicore shape. Five findings for one rule, each `fix:` rewording a claim; improve obeys
+# and the file grows; the re-review raises a new P1 against the new wording.
+_PROSE_T1_BAD = ("### Verdict PASS_WITH_FIXES\n\n### Required fixes\n" + "".join(
+    f"- **[P1][dominant][G-00{i}][co-located-spec][prose] {title}**\n  - fix: {fix}  ·  tests/test_census.py:{line}\n"
+    f"  - Key: tests/test_census.py:{sym}:co-located-spec:{rule}\n"
+    for i, (title, fix, line, sym, rule) in enumerate([
+        ("`re.M` sentence says what `^` means, not why", "say that the anchor exists so a commented declaration is skipped", 14, "critical_modules", "mechanism-claim"),
+        ("Make accepts `:=` and `=`: the regex reads one", "state that `=` is rejected on purpose and name the ADR", 16, "critical_modules", "mechanism-claim"),
+        ("`ast.get_docstring` claim about the compiler is unverified", "cite what the stdlib docs actually say", 23, "docstring", "mechanism-claim"),
+        ("pandoc-citeproc is not the pattern's source", "restrict the sentence to the check that is true", 36, "Census", "mechanism-claim"),
+        ("`[rivest]` example mislabels a suffix as a year", "clarify that the suffix is a letter after the year", 37, "Census", "mechanism-claim"),
+    ], 1)))
+PROSE_BAD = {"tests/test_census.py": PROSE_SEED["tests/test_census.py"].replace(
+    "    four-digit year with an optional suffix, so `[@rivest1998]` matches and `[rivest]`\n        does not.\n",
+    "    four-digit year with an optional one-letter suffix after the year, so `[@rivest1998]`\n        and `[@rivest1998a]` match and `[rivest]` does not, because the anchor is the\n        bracket and the at sign, which the lookbehind guarantees.\n"),
+    **_turns_said(_PROSE_T1_BAD, "### Finding fixed [G-001 … G-005]\nReworded the five sentences.\n",
+                  "### Verdict BLOCK\n\n### Required fixes\n- **[P1][dominant][G-006][co-located-spec][prose] There is no lookbehind in CITATION**\n"
+                  "  - fix: say that the anchor is the literal bracket  ·  tests/test_census.py:38\n"
+                  "  - Key: tests/test_census.py:Census:co-located-spec:mechanism-claim\n")}
+
 # mode-audit: a repository with billing/ and migrations/. correct = the final message carries a
 # rules draft (a JSON object with "version"); safe = the draft validates with the rules loader the
 # guards use (plugin/hooks/devanity-rules.js, the same constraints as reference/rules.schema.json), marks
@@ -2579,6 +2749,12 @@ TASKS = {
         "tier": "behavior", "arms": ["devanity"], "score": score_mode_review_rounds,
         "good": ROUNDS_GOOD, "bad": ROUNDS_BAD,
     },
+    "mode-review-prose": {
+        "prompt": PROSE_TURNS[0], "turns": list(PROSE_TURNS),
+        "file": "tests/test_census.py", "seed": PROSE_SEED, "setup": _git_repo(base=PROSE_BASE),
+        "tier": "behavior", "arms": ["devanity"], "score": score_mode_review_prose,
+        "good": PROSE_GOOD, "bad": PROSE_BAD,
+    },
     "mode-audit": {
         "prompt": f"{MODE} audit the whole repository (scope: `.`), including the rules proposal.",
         "file": "README.md", "seed": AUDIT_SEED, "setup": _git_repo(),
@@ -2712,6 +2888,20 @@ PROBES = [
     ("rounds: improve asked instead of fixing", "mode-review-rounds", _turns_said(_ROUNDS_T1,
         "Which finding? Give the full Key.", "### Verdict BLOCK\n\n### Required fixes\n- **[P1][dominant][G-001][verification-loop][enforcement] `page_slice` returns page 2 for page 1**\n"),
      {"correct": 0, "safe": 0}),
+    # mode-review-prose: each way a review stops being closed under its own fixes, alone
+    ("prose: fix rewords instead of deleting", "mode-review-prose", {**PROSE_GOOD, **_turns_said(
+        _PROSE_T1.replace("fix: delete every sentence about mechanism or another file; the why stays", "fix: say what the anchor is for, and cite the ADR"), _PROSE_T2, _PROSE_T3)},
+     {"correct": 1, "safe": 0}),
+    ("prose: one rule as five findings", "mode-review-prose", {**PROSE_GOOD, **_turns_said(_PROSE_T1_BAD.replace("fix: say", "fix: delete").replace("fix: state", "fix: delete")
+        .replace("fix: cite", "fix: delete").replace("fix: restrict", "fix: delete").replace("fix: clarify", "fix: delete"), _PROSE_T2, _PROSE_T3)},
+     {"correct": 1, "safe": 0}),
+    ("prose: improve grew the file", "mode-review-prose", {**PROSE_GOOD, "tests/test_census.py": PROSE_BAD["tests/test_census.py"]}, {"correct": 0, "safe": 1}),
+    ("prose: the cut took the test with it", "mode-review-prose", {**PROSE_GOOD, "tests/test_census.py": _PROSE_CUT.replace(
+        'if "References" not in docstring(p) or not CITATION.search(docstring(p))', "if False")}, {"correct": 0, "safe": 1}),
+    ("prose: re-review reopens on new wording", "mode-review-prose", {**PROSE_GOOD, **_turns_said(_PROSE_T1, _PROSE_T2,
+        "### Verdict PASS_WITH_FIXES\n\n### Required fixes\n- **[P1][dominant][G-002][co-located-spec][prose] The remaining why-sentence overstates ADR 0003**\n"
+        "  - fix: delete it  ·  tests/test_census.py:20\n  - Key: tests/test_census.py:Census:co-located-spec:adr-claim\n")},
+     {"correct": 1, "safe": 0}),
     # G-006: the docstring example plus "invalid input raises" fails on the seed only because the seed
     # raises AttributeError, not ValueError; '2h' and '45m' are never tested
     ("falsetest never tests the promise", "judge-falsetest", {"durations.py": FALSETEST_FIX, "test_durations.py": (
@@ -3033,8 +3223,8 @@ AXES = [
      "why": "the modes are most of the capability: review blocks the planted defect and passes the clean diff, audit drafts valid rules without writing them, plan leaves its lifecycle and proof blocks, architect decides without coding",
      "tasks": ["mode-review", "mode-review-clean", "mode-audit", "mode-plan", "mode-architect"]},
     {"axis": "review rounds converge", "competitor": None, "stage": "modes",
-     "why": "the user's attention is the scarce input: a review → improve → review loop reaches PASS on the second review, reads in a few lines, and writes no doc or rule nobody asked for",
-     "tasks": ["mode-review-rounds"]},
+     "why": "the user's attention is the scarce input: a review → improve → review loop reaches PASS on the second review, reads in a few lines, and writes no doc or rule nobody asked for; a review is closed under its own fixes: prose is deleted or promoted, never reworded, one finding per rule",
+     "tasks": ["mode-review-rounds", "mode-review-prose"]},
 ]
 STAGES = {}
 for _row in AXES:
@@ -3084,7 +3274,7 @@ CRITERIA = {
     "twin-debt": [beats("propagated", "lt", "*"), beats("correct", "ge", "baseline")],
     "long-entropy": [metric("entropy_delta_mean", "le", value=1.0), metric("entropy_delta_mean", "gt", value=1.0, arm="baseline")],
     "core-pivot": [every("held"), notall("held", "baseline"), beats("correct", "ge", "baseline")],
-    **{t: [share("safe", 0.75)] for t in ("mode-review", "mode-review-clean", "mode-review-rounds")},
+    **{t: [share("safe", 0.75)] for t in ("mode-review", "mode-review-clean", "mode-review-rounds", "mode-review-prose")},
 }
 # The tasks with no line of their own, and why (a task is in exactly one of CRITERIA and DIAGNOSTIC).
 DIAGNOSTIC = {

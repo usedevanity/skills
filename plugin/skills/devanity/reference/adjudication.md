@@ -15,7 +15,6 @@ BASIS: <each check you performed and its result; for CLEAN, also what would have
 CONTAMINATED: <author reasoning you were given and ignored; omit the line when none>
 FINDINGS: <`none` when no check fired; otherwise empty, with one item per finding below>
 - **[P0-P3][dominant|trade][C-###][dimension][rung] Title**
-  - fix: <the one action> · <path:line>
   - Key: <path>:<symbol-or-heading>:<dimension>:<rule>
   - why: <a verbatim quote and its path:line, then the risk>
   - basis: <fix-class reason; default to trade, since you cannot check a regression envelope>
@@ -25,7 +24,7 @@ NOT_ADJUDICATED: <what the contract asked that you could not judge, and why, or 
 - CLEAN: every check in the contract ran and none fired.
 - NOT_ADJUDICATED: nothing fired and something could not be judged.
 
-Several apply → the most severe: FINDINGS > NOT_ADJUDICATED > CLEAN. The NOT_ADJUDICATED line renders in every run; the verdict of that name fires only when that line is not empty and no check fired. Aliases are `C-###`: the caller renumbers what it adopts, and the Key is the identity that crosses over.
+Several apply → the most severe: FINDINGS > NOT_ADJUDICATED > CLEAN. The NOT_ADJUDICATED line renders in every run; the verdict of that name fires only when that line is not empty and no check fired. Aliases are `C-###`: the caller folds what it adopts by `dimension:rule`, composes each `fix:` under its own Finding format, and renumbers; the Key is the identity that crosses over.
 
 ## Rules
 
