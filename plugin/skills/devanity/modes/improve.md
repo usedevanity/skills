@@ -2,7 +2,7 @@
 
 Load: `reference/vocabulary.md`, `reference/quality.md`, `reference/baseline.md`; `reference/claude-code.md` for an ambiguous reference.
 
-Fix exactly one approved unit, on the ladder (`reference/quality.md`): a finding, or one instruction surface. The words after `improve` are the reference; with none, ask. When the human typed `improve <ref>`, that is the approval for that one unit; when you routed here yourself, state how you read the reference and ask before any write, unless an open Change's scope covers the path: the contract is the approval. Either way, four exceptions stop for a decision with the proposed patch: the high-risk class (kernel rung 4), a trade, a new dependency, or a hook or CI change.
+Fix exactly one approved unit, on the ladder (`reference/quality.md`): a finding, or one instruction surface. The words after `improve` are the reference; with none, ask. When the human typed `improve <ref>`, that is the approval for that one unit; when you routed here yourself, state how you read the reference and ask before any write. Either way, four exceptions stop for a decision with the proposed patch: the high-risk class (kernel rung 4), a trade, a new dependency, or a hook or CI change.
 
 Several references in one invocation (`improve G-001 G-004`, or "the required fixes" of this session's last review: its open P0/P1, never its P2/P3) are several units, run in severity order, each with its own oracle. A unit that hits an exception stops alone; the rest proceed.
 
