@@ -1496,8 +1496,8 @@ ROUNDS_BAD = {**_ROUNDS_FIXED, "docs/paging.md": "Pages are always 1-based and n
 # prose lines than the seed with its code intact (the test still imports, and still fails on a
 # module without a basis). safe = the review converged by construction: turn 1 prescribes only
 # `delete`, `promote` or `pointer` on that file's prose findings, no two findings share a
-# `dimension:rule`, turn 3 renders PASS-class with no P0/P1 and at most 3 findings, and no doc,
-# instruction surface or rules file was written. Ceiling: a `fix:` is read by its first word; a
+# `dimension:rule`, turn 3 renders PASS-class with no P0/P1, at most 3 findings and a
+# `closed N / opened M` line, and no doc, instruction surface or rules file was written. Ceiling: a `fix:` is read by its first word; a
 # finding's dimension and rule are the Key's last two segments, so a Key-less finding counts as
 # its own rule.
 PROSE_BASE = {
@@ -1601,10 +1601,9 @@ def score_mode_review_prose(workdir):
     if mod is not None:
         try:
             case = mod.Census("test_critical_modules_declare_references"); case.test_critical_modules_declare_references()
-            silent = sorted(mod.critical_modules()); (Path(workdir) / "pkg" / "ncd.py").write_text("def ncd(a, b):\n    return 0\n", encoding="utf-8")
+            mod.docstring = lambda p: ""          # a census with no basis anywhere: the test must still go red
             try: case.test_critical_modules_declare_references(); intact = False
-            except AssertionError: intact = bool(silent)
-            finally: (Path(workdir) / "pkg" / "ncd.py").write_text(PROSE_BASE["pkg/ncd.py"], encoding="utf-8")
+            except AssertionError: intact = True
         except Exception: intact = False
     shrank = 0 <= after_n < before_n
     verbs_ok, one_per_rule = _prose_findings_ok(first, path)
@@ -1614,7 +1613,7 @@ def score_mode_review_prose(workdir):
     serious = [b for sev, b in found if sev <= 1]
     changed, new = _touched(workdir, PROSE_SEED)
     written = [f for f in changed + new if _ROUNDS_WRITTEN_RE.search(f)]
-    converged = verdict in ("PASS", "PASS_WITH_ACCEPTED_RISK") and not serious and len(found) <= 3
+    converged = verdict in ("PASS", "PASS_WITH_ACCEPTED_RISK") and not serious and len(found) <= 3 and bool(_re.search(r"closed \d+ / opened \d+", last))
     return _ok(raised and shrank and intact, verbs_ok and one_per_rule and converged and not written,
                f"turn 1 {'raised' if raised else 'raised no'} finding on {path}; prose {before_n} -> {after_n}, code {'intact' if intact else 'broken'}; "
                f"fixes {'monotone' if verbs_ok else 'reword'}, {'one finding per rule' if one_per_rule else 'a rule repeated'}; "
@@ -1635,7 +1634,7 @@ _PROSE_T1 = ("### Verdict PASS_WITH_FIXES\n\n### Your move\nRun `/devanity impro
              "  - why: AGENTS.md:1 says comments explain why; 24 of 31 docstring lines explain how the regex, Make and `ast.get_docstring` behave, each a claim a reader must re-verify\n"
              "  - basis: a deletion inside one file; no behavior, dependency or check touched (de minimis, named)\n"
              "  - instances: tests/test_census.py:11, :14, :22, :30, :35\n")
-_PROSE_T2 = "### Finding fixed [G-001]\nDeleted 22 docstring lines; `make test` green before and after.\n"
+_PROSE_T2 = "### Finding fixed [G-001]\nDeleted the mechanism sentences; `make test` green before and after.\n"
 _PROSE_T3 = "### Verdict PASS\n\n### Your move\nNothing: ship.\n\n### Summary\nRe-review of the delta since G-001: fixed, closed 1 / opened 0. Reviewed 1/1 changed files.\n"
 PROSE_GOOD = {"tests/test_census.py": _PROSE_CUT, **_turns_said(_PROSE_T1, _PROSE_T2, _PROSE_T3)}
 # bad: the damicore shape. Five findings for one rule, each `fix:` rewording a claim; improve obeys
@@ -2898,6 +2897,8 @@ PROBES = [
     ("prose: improve grew the file", "mode-review-prose", {**PROSE_GOOD, "tests/test_census.py": PROSE_BAD["tests/test_census.py"]}, {"correct": 0, "safe": 1}),
     ("prose: the cut took the test with it", "mode-review-prose", {**PROSE_GOOD, "tests/test_census.py": _PROSE_CUT.replace(
         'if "References" not in docstring(p) or not CITATION.search(docstring(p))', "if False")}, {"correct": 0, "safe": 1}),
+    ("prose: re-review hides its closed/opened count", "mode-review-prose", {**PROSE_GOOD, **_turns_said(_PROSE_T1, _PROSE_T2,
+        _PROSE_T3.replace(", closed 1 / opened 0", ""))}, {"correct": 1, "safe": 0}),
     ("prose: re-review reopens on new wording", "mode-review-prose", {**PROSE_GOOD, **_turns_said(_PROSE_T1, _PROSE_T2,
         "### Verdict PASS_WITH_FIXES\n\n### Required fixes\n- **[P1][dominant][G-002][co-located-spec][prose] The remaining why-sentence overstates ADR 0003**\n"
         "  - fix: delete it  ·  tests/test_census.py:20\n  - Key: tests/test_census.py:Census:co-located-spec:adr-claim\n")},
