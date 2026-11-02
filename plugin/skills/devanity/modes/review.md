@@ -66,7 +66,7 @@ Deep (high-risk domain) · check: `pnpm test --filter auth` → 12 passed, no si
   - rule: a permission gate ships tested, or with a recorded acceptance.
   - derivation: none applies; no principle or accepted risk covers an untested permission gate.
   - context: high-risk class, guarded today only by human review · anchors G-001
-  - options: decline → nothing recorded; add the tests, re-run review · accept → PASS_WITH_ACCEPTED_RISK, with who, why, expiry and a compensating control recorded.
+  - options: decline → no acceptance; add the tests, re-run review · accept → PASS_WITH_ACCEPTED_RISK, with who, what, why, expiry and any compensating control recorded.
   - recommendation: decline, p=0.8; the fix is one file, cheaper than the recorded risk.
   - if undecided: the verdict stays BLOCK and re-fires on the next review of this diff.
 
