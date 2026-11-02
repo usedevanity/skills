@@ -58,12 +58,12 @@ Fixing G-001 from the audit example. It alters what a billing path returns, so t
 
 ```md
 - **[DECIDE][blocking][G-005][acceptance] Authorize the cents fix to `sumLineItems`?**
-  - axis: billing × write-authority
-  - rule: a write under `billing/**` needs a recorded human decision.
-  - derivation: tried the ledger: no human decision covers `billing/**` in this change.
+  - axis: payments × write-authority
+  - rule: a write under `src/payments/**` needs a recorded human decision.
+  - derivation: tried the ledger: no human decision covers `src/payments/**` in this change.
   - context: anchors G-001; the patch sums in integer cents and adds the failing case as a test.
   - options: authorize → the oracle-first sequence runs and the fix applies · decline → the patch stays a proposal · test only → land the oracle, leave the arithmetic.
-  - recommendation: authorize, p=0.9; the failing case is known, and the oracle lands with the fix.
+  - recommendation: authorize, p=0.9; the failing case is known.
   - if undecided: nothing is written; G-001 re-fires on the next audit.
 ```
 
