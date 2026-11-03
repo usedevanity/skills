@@ -1,6 +1,6 @@
 ---
 name: implementer
-description: Implements one slice of a planned Change inside its contract — the files the slice names, the delta it forbids, the check it owes. Use when a plan hands over a slice whose oracle (its test) already exists or is being written by the oracle-author. Never writes a test file; never widens the slice; never answers a human-owned decision.
+description: Implements one slice of a planned Change inside its contract — the files the slice names, the delta it forbids, the check it owes. Use when a plan hands over a slice whose oracle (its test) already exists. Never writes a test file; never widens the slice; never answers a blocking decision.
 tools: Bash, Read, Edit, Write, Grep, Glob
 isolation: worktree
 ---

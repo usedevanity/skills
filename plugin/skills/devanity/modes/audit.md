@@ -121,7 +121,12 @@ Enforced: strict TS (tsconfig), lint and unit tests (CI test job). Prose-only: "
 | instruction-hygiene | GOOD | syndrome pass on CLAUDE.md: no hits |
 
 ### Foundations
-Executable Intent BAD · Testability BAD · Understandability WEAK · Deterministic Guardrails GOOD · Observability absent: nothing signals a totals mismatch (inside G-001) · Reversibility present: totals are computed on read, never stored.
+Executable Intent BAD · G-002
+Testability BAD · G-001
+Understandability WEAK · G-005
+Deterministic Guardrails GOOD · import sweep
+Observability absent · nothing signals a totals mismatch (G-001)
+Reversibility present · totals computed on read, never stored
 
 ### Hotspots
 `src/payments/totals.ts` 23 commits × 210 lines · `src/payments/refunds.ts` 9 × 140 · the rest ≤ 3 commits. G-001 sits in the top hotspot.
@@ -143,19 +148,21 @@ none
 
 ### Decisions
 - **[DECIDE][blocking][G-003][acceptance] Authorize a write to the money path to fix G-001?**
-  - decision: whether the billing sum may change; an authorization this run does not hold (kernel rung 4).
-  - derivation: none applies; no principle under `billing/**` speaks to the sum's correction.
-  - context: anchors G-001; `sumLineItems` is a billing path.
-  - options: authorize → `/devanity improve G-001` proposes the patch and stops for this answer · decline → G-001 stays open · test only → land the failing case as a test and re-decide.
-  - recommendation: authorize; a known failing case, and the fix is smaller than the exposure.
-  - if undecided: the P0 stays unaccepted and re-fires on the next audit.
+  - axis: payments × write-authority
+  - rule: a change that alters billing arithmetic needs a recorded human decision before any write.
+  - derivation: none applies.
+  - context: `sumLineItems` alters billing arithmetic (high-risk class) · anchors G-001
+  - options: authorize → the patch `/devanity improve G-001` proposes is applied under `/devanity allow src/payments/**` · decline → G-001 stays open.
+  - recommendation: authorize, p=0.8; a known failing case, and the fix is smaller than the exposure.
+  - if undecided: the P0 re-fires on the next audit.
 - **[DECIDE][blocking][G-004][rule] Is "money integers" a contract worth a gate?**
-  - decision: whether the rule is durable intent (enforce it) or a stale preference (demote it); product intent.
-  - derivation: none applies; the rule is prose only, with no principle or decision behind it.
-  - context: anchors G-002.
+  - axis: payments × money-representation
+  - rule: money is integer cents.
+  - derivation: none applies.
+  - context: the rule is prose only · anchors G-002
   - options: enforce → `/devanity improve G-002` · demote → rewrite the line as guidance, close G-002 · defer → dormant, worth doing when the next money bug lands.
-  - recommendation: enforce, after G-001.
-  - if undecided: proposed for tracker promotion as an open decision; re-surfaces on the next audit.
+  - recommendation: enforce, p=0.7; G-001 is the prose rule failing once already.
+  - if undecided: re-surfaces on the next audit.
 
 ### Suggested sequence
 G-001 once G-003 authorizes it; then G-002 per G-004.
