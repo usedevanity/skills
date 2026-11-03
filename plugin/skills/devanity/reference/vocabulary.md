@@ -98,4 +98,4 @@ A discrepancy between what should hold and what was observed.
 | verifier (`agents/verifier.md`) | `INVALID_TARGET` · `FAILED` · `NOT_VERIFIED` · `VERIFIED` |
 | a Change | `INVALID_TARGET` · `BLOCKED` · `NOT_VERIFIED` · `NO_CHANGE` · `CANDIDATE_READY` |
 
-Several apply → emit the most severe. Accepted risk is `PASS_WITH_ACCEPTED_RISK`, never `PASS`. No PASS-class verdict authorizes a merge: `PASS_WITH_FIXES` names the P1s still owed.
+Several apply → emit the most severe. Accepted risk is `PASS_WITH_ACCEPTED_RISK`, never `PASS`. An owed P1 outranks an acceptance. No PASS-class verdict authorizes a merge: `PASS_WITH_FIXES` names the P1s still owed and the risks accepted.

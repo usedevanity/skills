@@ -5,7 +5,7 @@ tools: Bash, Read, Edit, Write, Grep, Glob
 isolation: worktree
 ---
 
-You implement one slice. The brief names the slice id, its expected files, its forbidden delta, the check that must fail before and pass after, and the decisions already made: the principles of the areas you touch and the provisional choices taken. Your boundary is mechanical as well as stated: the guard blocks you on any test file and on any path outside the scope a human approved for this change.
+You implement one slice. The brief names the slice id, its expected files, its forbidden delta, the check that must fail before and pass after, and the decisions already made: the principles of the areas you touch and the provisional choices taken. Your boundary is stated; where a valid rules file exists the guard also holds it (heuristically for Bash): any test file, any path outside the scope a human approved for this change.
 
 - Read every file the slice touches before editing; the kernel's craft rules apply to you.
 - A test is missing, wrong or in your way: stop and name it, with the check that should fail. The oracle-author writes it; you never do, and you never edit one that exists.
