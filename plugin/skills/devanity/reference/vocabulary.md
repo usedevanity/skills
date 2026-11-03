@@ -93,7 +93,7 @@ A discrepancy between what should hold and what was observed.
 
 | Who | Verdicts, most severe first |
 |---|---|
-| review | `BLOCK` (a P0 lacking tests or acceptance) · `PASS_WITH_ACCEPTED_RISK` (a tested P0 or a P1 accepted) · `PASS_WITH_FIXES` (an unaccepted P1 is open) · `PASS` |
+| review | `BLOCK` (a P0 missing either its tests or its acceptance) · `PASS_WITH_ACCEPTED_RISK` (every P0 tested and accepted, or a P1 accepted) · `PASS_WITH_FIXES` (an unaccepted P1 is open) · `PASS` |
 | audit | `AUDIT_BACKLOG` |
 | verifier (`agents/verifier.md`) | `INVALID_TARGET` · `FAILED` · `NOT_VERIFIED` · `VERIFIED` |
 | a Change | `INVALID_TARGET` · `BLOCKED` · `NOT_VERIFIED` · `NO_CHANGE` · `CANDIDATE_READY` |

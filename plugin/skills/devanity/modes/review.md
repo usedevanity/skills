@@ -77,5 +77,5 @@ Deep (high-risk domain) · check: `pnpm test --filter auth` → 12 passed, no si
 none
 
 ### Correction prompt
-"Add allow/deny tests for canDelete to the auth suite, then run /devanity review again and record the acceptance of the residual risk (who, what, why, expiry)."
+"Add allow/deny tests for canDelete to the auth suite, then run /devanity review again; the residual risk waits for the human's answer to G-003."
 ```
