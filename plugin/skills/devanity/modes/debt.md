@@ -1,6 +1,6 @@
 # debt
 
-Load: `reference/vocabulary.md` (Finding, Decision); `modes/audit.md` (Hotspots).
+Load: `reference/vocabulary.md` (Finding, Decision); `reference/quality.md` (Dimensions, Fix class); `modes/audit.md` (Hotspots).
 
 Read-only: nothing outlives the reply unless the user asks for a record.
 
@@ -8,7 +8,7 @@ The outer loop's recurring engine: every deliberate shortcut, every decision sti
 
 ## Scan
 
-1. **Code markers:** `grep -rnE '(#|//|--|<!--) ?deferred:' .` skipping `node_modules`, `.git`, build output (add comment prefixes your stack uses). Each hit is one row; its age is `git blame -L<line>,<line>`.
+1. **Code markers:** `grep -rnE --exclude-dir={node_modules,.git,dist,build} '(#|//|--|<!--) ?deferred:' .` (add comment prefixes your stack uses). Each hit is one row; its age is `git blame -L<line>,<line>`.
 2. **Pending decisions:** the session's queue and every `pending` entry of `<git-common-dir>/devanity/decisions.jsonl`.
 3. **Ledger:** `node "${CLAUDE_PLUGIN_ROOT}/hooks/devanity-ledger.js" stats --json` for the counts, then the records beside it: `events.jsonl` (`blocked`, `would_block` with `path` or `command` and `rule`; `false_ready` with `check`; `unmeasured` with `paths`), `proofs.jsonl` (`status`, `agent_status`, `measured`, `reason`, `contract`), `contracts.jsonl` (the `scope` that places a proof on paths). A proof with `measured: null` reads by its `reason`: `no declared check…` is a `VERIFIED` claim nothing could measure (it pairs with an `unmeasured` event); no `reason` with an `agent_status` other than `VERIFIED` is an honest `NOT_VERIFIED`, which claims nothing and promotes nothing. Skip a torn last line. No ledger → say so and continue.
 4. **Hotspots:** `node "${CLAUDE_PLUGIN_ROOT}/scripts/hotspots.mjs"` over the whole repository.
@@ -59,14 +59,15 @@ src/api/search.ts:14 — linear scan over every document. ceiling: O(n) per quer
 ### Promotions
 b · unmeasured 3× on src/sync/** (`unmeasured` events beside the proofs of C-2026-08-02-1, C-2026-08-19-2, C-2026-09-10-1, each `reason: no declared check`; paths under src/sync/)
 - **[DECIDE][blocking][G-002][trade] Declare `npm test -- src/sync` as the check of `src/sync/**`?**
-  - decision: whether sync proofs are measured by a declared check, at the cost of a block when it fails.
+  - axis: src/sync × declared-check
+  - rule: a path with repeated unmeasured proofs declares the CI check narrowed to it.
   - derivation: tried the map: `src/sync/**` declares no `check`, so nothing decides it.
-  - context: three `VERIFIED` claims nothing could measure; the command is the CI test step narrowed to the path.
-  - options: declare → the map entry is proposed for its PR · defer → dormant, worth doing at the next unmeasured claim.
-  - recommendation: declare; unmeasured claims repeating on one path are what a declared check is for.
+  - context: three `VERIFIED` claims no declared check measured (lane b) · anchors src/sync/**:check:verification-loop:no-declared-check
+  - options: declare → `"src/sync/**": { "check": "npm test -- src/sync" }` is proposed for its PR · defer → dormant, worth doing at the next unmeasured claim.
+  - recommendation: declare, p=0.8; the command is the CI test step narrowed to the path.
   - if undecided: re-fires on the next debt run.
 a · src/api/search.ts:14, deferred 7 months ago, top hotspot (38 commits × 260 lines)
-- [P2][dominant][G-003][debt-containment][enforcement] Linear scan in `search` — Key: src/api/search.ts:search:debt-containment:linear-scan — basis: checked: the existing `SearchIndex` covers the query; no API change → `/devanity improve G-003`
+- [P2][dominant][G-003][debt-containment][enforcement] Linear scan in `search` — Key: src/api/search.ts:search:debt-containment:linear-scan — basis: checked: the existing `SearchIndex` covers the query; no API change; cost: one index lookup per query, bounded
 
 2 deferrals, 1 without a trigger, 1 decision pending, 2 promotions (1 fix, 1 proposed).
 ```

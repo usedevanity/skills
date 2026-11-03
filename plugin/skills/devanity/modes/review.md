@@ -42,7 +42,7 @@ The diff adds a permission check with no test.
 ### Verdict BLOCK
 
 ### Your move
-Add the allow/deny tests (`/devanity improve G-001`), or accept the risk: `/devanity decide G-003 accept`.
+Add the allow/deny tests (`/devanity improve G-001`), then answer G-003: `/devanity decide G-003 accept`.
 
 ### Summary
 New `canDelete()` gate on the delete route: permission behavior altered (high-risk class) with no test. Reviewed 3/3 changed files.
@@ -61,13 +61,13 @@ Deep (high-risk domain) · check: `pnpm test --filter auth` → 12 passed, no si
 - [P2][trade][G-002][boundary-integrity][enforcement] Delete route imports the DB client directly — Key: src/routes/delete.ts:handler:boundary-integrity:layer-bypass
 
 ### Decisions
-- **[DECIDE][blocking][G-003][acceptance] Ship the delete route without permission tests?**
-  - axis: auth × untested-gate
-  - rule: a permission gate ships tested, or with a recorded acceptance.
-  - derivation: none applies; no principle or accepted risk covers an untested permission gate.
+- **[DECIDE][blocking][G-003][acceptance] Accept the delete gate's residual risk once tested?**
+  - axis: auth × gate-residual-risk
+  - rule: a permission gate ships with its tests and a recorded acceptance of the residual risk.
+  - derivation: none applies.
   - context: high-risk class, guarded today only by human review · anchors G-001
-  - options: decline → nothing recorded; add the tests, re-run review · accept → PASS_WITH_ACCEPTED_RISK, with who, why, expiry and a compensating control recorded.
-  - recommendation: decline, p=0.8; the fix is one file, cheaper than the recorded risk.
+  - options: decline → BLOCK stays · accept → PASS_WITH_ACCEPTED_RISK once tested, with who, what, why, expiry and any compensating control recorded.
+  - recommendation: accept, p=0.7; with the tests landed the residual is reviewer coverage of callers, small and named.
   - if undecided: the verdict stays BLOCK and re-fires on the next review of this diff.
 
 ### Missing verification
@@ -77,5 +77,5 @@ Deep (high-risk domain) · check: `pnpm test --filter auth` → 12 passed, no si
 none
 
 ### Correction prompt
-"Add allow/deny tests for canDelete to the auth suite, then run /devanity review again. To ship without them, record an explicit acceptance (who, why, expiry)."
+"Add allow/deny tests for canDelete to the auth suite, then run /devanity review again; the residual risk waits for the human's answer to G-003."
 ```

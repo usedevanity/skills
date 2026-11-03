@@ -49,7 +49,7 @@ const estimateTokens = (s) => {
 // counts stayed green throughout. The honest mechanism is a ratchet, not a cap: the budget sits at
 // the last deliberate size, and the PR that grows the skill raises it in the same diff — growth
 // stays possible and stops being free. Lowering it after a trim is the same deliberate act.
-export const SKILL_TOTAL_BUDGETS = { devanity: 138200 }; // bytes, every file under skills/<name>/: 105176 after the C1 rewrite (205345 with the moved subtrees before it); 114485 after phase V3/V4 (docs merged into audit and improve, the §0.6 fixes, the outer loop in init, audit, debt and improve: +9% over 104907); 124139 after the V acceptance-review fixes (init report template and CI toolchain, the instruction-scope audit example, missing-home improve, debt's unmeasured lane: +7% over 116139); 128574 after A0.4 (the measured subagent facts in reference/claude-code.md: +0.5% over 127898); 132650 after A2/A3 (principles and the entropy ratchet in rules.schema.json, the derivation line in the vocabulary and the five examples, debt's principle lane: +3.2% over 128574), +3% headroom; 137943 after the decision loop as rules (provisional decisions, axis and rule in the block, the axes table in plan, the principle lane in debt: +1% over 136547), +0.2% headroom
+export const SKILL_TOTAL_BUDGETS = { devanity: 138800 }; // bytes, every file under skills/<name>/: 105176 after the C1 rewrite (205345 with the moved subtrees before it); 114485 after phase V3/V4 (docs merged into audit and improve, the §0.6 fixes, the outer loop in init, audit, debt and improve: +9% over 104907); 124139 after the V acceptance-review fixes (init report template and CI toolchain, the instruction-scope audit example, missing-home improve, debt's unmeasured lane: +7% over 116139); 128574 after A0.4 (the measured subagent facts in reference/claude-code.md: +0.5% over 127898); 132650 after A2/A3 (principles and the entropy ratchet in rules.schema.json, the derivation line in the vocabulary and the five examples, debt's principle lane: +3.2% over 128574), +3% headroom; 137943 after the decision loop as rules (provisional decisions, axis and rule in the block, the axes table in plan, the principle lane in debt: +1% over 136547), +0.2% headroom; 138490 after the instructions audit (the core route in plan and architect, the README's skill-only scope, the mode verbs and the proof gate stated as the code has them, quality.md loaded by debt and init, the verdict order as severity order: +0.3% over 138155), +0.2% headroom
 export function checkSkillTotal(skillsDir, budgets) {
   const errors = [];
   const sizeOf = (d) => readdirSync(d).reduce((n, f) => {
@@ -74,6 +74,30 @@ export function checkSkillTotal(skillsDir, budgets) {
 // Every relative markdown link must resolve on disk. A link to something that was removed reads as
 // current to anyone — human or agent — who does not try it: the "stale doc" criterion applied to a
 // doc's own references. Fences are stripped; a link inside a code block renders as text, not a link.
+// Worked examples teach the shape agents copy (the 2026-11 audit: four of seven modes shipped
+// `decision:` where the template says `axis:`/`rule:`). Every bold `[DECIDE][status][id][kind] Title`
+// item in a mode file (they occur only in examples) carries, nested, the Decision template's fields:
+// axis, rule, derivation, context, options, recommendation with `p=`, `if undecided` on a blocking
+// one, `acted` on a provisional one. A dormant decision renders on one line and is not a block.
+// Fences are not parsed: a nested fence inside a four-backtick example hid a block from the first version.
+export function checkDecisionExamples(text) {
+  const errors = [];
+  const lines = text.replace(/\r\n?/g, '\n').split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const m = /^- \*\*\[DECIDE\]\[(blocking|provisional)\]\[([^\]]+)\]\[[^\]]+\] (.*)\*\*\s*$/.exec(lines[i]);
+    if (!m) continue;
+    const nested = [];
+    for (let j = i + 1; j < lines.length && /^\s+- /.test(lines[j]); j++) nested.push(lines[j].trim());
+    const has = (f) => nested.some((l) => l.startsWith(`- ${f}:`));
+    const missing = ['axis', 'rule', 'derivation', 'context', 'options', 'recommendation'].filter((f) => !has(f));
+    if (!nested.some((l) => /^- recommendation:.*\bp=(?:0(?:\.\d+)?|1(?:\.0+)?|\.\d+)\b/.test(l))) missing.push('p=');
+    if (m[1] === 'blocking' && !has('if undecided')) missing.push('if undecided');
+    if (m[1] === 'provisional' && !has('acted')) missing.push('acted');
+    if (missing.length) errors.push(`example decision "${m[3]}" (${m[2]}) lacks ${missing.join(', ')}`);
+  }
+  return errors;
+}
+
 export function checkRelativeLinks(file) {
   if (!existsSync(file)) return [];
   const dir = dirname(file);
@@ -218,6 +242,13 @@ export function validate(skillsDir) {
         for (const ref of cited) {
           if (!declared.has(ref)) err(skill, `modes/${file} cites ${ref} but its declaration (Load: line or the mode table row for "${mode}") omits it`);
         }
+      }
+    }
+
+    // 4b. Worked examples match the Decision template (checkDecisionExamples).
+    if (existsSync(modesDir)) {
+      for (const file of readdirSync(modesDir).filter((f) => f.endsWith('.md'))) {
+        for (const e of checkDecisionExamples(readFileSync(join(modesDir, file), 'utf8'))) err(skill, `modes/${file} ${e}`);
       }
     }
 

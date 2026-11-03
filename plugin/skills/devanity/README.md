@@ -8,7 +8,7 @@ This page is for a skill-only install:
 npx skills add usedevanity/skills --skill devanity --agent claude-code
 ```
 
-A skill-only install gets the kernel and the modes, and nothing that runs outside the model: no hooks, no guard, no proof oracle, no ledger, no re-injection after compaction. For those, install the plugin. The plugin install, the verbs and what each is for are on the [repository page](https://github.com/usedevanity/skills#readme).
+A skill-only install gets the kernel and the modes, and nothing that runs outside the model: no hooks (so no `decide`, `accept`, `allow`), no guard, no proof oracle, no ledger, no re-injection after compaction, and none of the scripts `audit`, `debt` and `init` run. For those, install the plugin. The plugin install, the verbs and what each is for are on the [repository page](https://github.com/usedevanity/skills#readme).
 
 The modes hand collection and independent proof to two agents, which the plugin ships and a skill-only install must add:
 

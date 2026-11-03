@@ -10,8 +10,8 @@ Classify first (`reference/vocabulary.md`):
 
 - `A0` → return the constraints that already hold, and stop.
 - `A1` → cite the decision or contract being followed, state the conformance constraints, and stop. No citable decision → it is `A2`.
-- `A2` whose drivers agree and that crosses no existing boundary → the kernel's ≤10-line shape is the whole answer: write it and stop.
-- `A2` with drivers in conflict, or crossing or redrawing an existing boundary → run the phases.
+- `A2` whose drivers agree, that crosses no existing boundary and alters no `core` invariant → the kernel's ≤10-line shape is the whole answer: write it and stop.
+- `A2` with drivers in conflict, crossing an existing boundary, or altering a `core` invariant → run the phases.
 
 ## Rules
 
