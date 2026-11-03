@@ -76,25 +76,24 @@ export function checkSkillTotal(skillsDir, budgets) {
 // doc's own references. Fences are stripped; a link inside a code block renders as text, not a link.
 // Worked examples teach the shape agents copy (the 2026-11 audit: four of seven modes shipped
 // `decision:` where the template says `axis:`/`rule:`). Every bold `[DECIDE][status][id][kind] Title`
-// item inside a ```md example carries, nested, the Decision template's fields: axis, rule, derivation,
-// context, options, recommendation with `p=`, `if undecided` on a blocking one, `acted` on a
-// provisional one. A dormant decision renders on one line and is not a block.
+// item in a mode file (they occur only in examples) carries, nested, the Decision template's fields:
+// axis, rule, derivation, context, options, recommendation with `p=`, `if undecided` on a blocking
+// one, `acted` on a provisional one. A dormant decision renders on one line and is not a block.
+// Fences are not parsed: a nested fence inside a four-backtick example hid a block from the first version.
 export function checkDecisionExamples(text) {
   const errors = [];
-  for (const fence of text.matchAll(/```md\n([\s\S]*?)```/g)) {
-    const lines = fence[1].split('\n');
-    for (let i = 0; i < lines.length; i++) {
-      const m = /^- \*\*\[DECIDE\]\[(blocking|provisional)\]\[([^\]]+)\]\[[^\]]+\] (.*)\*\*\s*$/.exec(lines[i]);
-      if (!m) continue;
-      const nested = [];
-      for (let j = i + 1; j < lines.length && /^\s+- /.test(lines[j]); j++) nested.push(lines[j].trim());
-      const has = (f) => nested.some((l) => l.startsWith(`- ${f}:`));
-      const missing = ['axis', 'rule', 'derivation', 'context', 'options', 'recommendation'].filter((f) => !has(f));
-      if (!nested.some((l) => /^- recommendation:.*\bp=(?:0?\.\d+|1)\b/.test(l))) missing.push('p=');
-      if (m[1] === 'blocking' && !has('if undecided')) missing.push('if undecided');
-      if (m[1] === 'provisional' && !has('acted')) missing.push('acted');
-      if (missing.length) errors.push(`example decision "${m[3]}" (${m[2]}) lacks ${missing.join(', ')}`);
-    }
+  const lines = text.replace(/\r\n?/g, '\n').split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const m = /^- \*\*\[DECIDE\]\[(blocking|provisional)\]\[([^\]]+)\]\[[^\]]+\] (.*)\*\*\s*$/.exec(lines[i]);
+    if (!m) continue;
+    const nested = [];
+    for (let j = i + 1; j < lines.length && /^\s+- /.test(lines[j]); j++) nested.push(lines[j].trim());
+    const has = (f) => nested.some((l) => l.startsWith(`- ${f}:`));
+    const missing = ['axis', 'rule', 'derivation', 'context', 'options', 'recommendation'].filter((f) => !has(f));
+    if (!nested.some((l) => /^- recommendation:.*\bp=(?:0(?:\.\d+)?|1(?:\.0+)?|\.\d+)\b/.test(l))) missing.push('p=');
+    if (m[1] === 'blocking' && !has('if undecided')) missing.push('if undecided');
+    if (m[1] === 'provisional' && !has('acted')) missing.push('acted');
+    if (missing.length) errors.push(`example decision "${m[3]}" (${m[2]}) lacks ${missing.join(', ')}`);
   }
   return errors;
 }

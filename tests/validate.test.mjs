@@ -190,6 +190,10 @@ test('a worked example decision carries the template fields', () => {
   const provisional = ok.replace('[blocking]', '[provisional]').replace('  - if undecided: stays.\n', '');
   failsWith(checkDecisionExamples(provisional), 'lacks acted');
   assert.deepEqual(checkDecisionExamples('- [DECIDE][dormant][G-003][trade] T — worth doing when x — anchors K\n'), []);
+  // Verifier probes: a block after an inner fence inside a four-backtick example, CRLF, and p=0.
+  failsWith(checkDecisionExamples('````md\n# r\n```\nproof\n```\n' + bad.slice(6).replace(/```\n$/, '````\n')), 'lacks axis, rule, p=');
+  failsWith(checkDecisionExamples(bad.replace(/\n/g, '\r\n')), 'lacks axis, rule, p=');
+  assert.deepEqual(checkDecisionExamples(ok.replace('p=0.7', 'p=0')), []);
   // The validator runs it over every mode file, so a drifted example fails the whole skill.
   withSkill('foo', fm('foo'), (dir, write) => {
     write('modes/review.md', `# review\n\n${bad}`);
