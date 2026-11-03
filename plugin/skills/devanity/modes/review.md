@@ -42,7 +42,7 @@ The diff adds a permission check with no test.
 ### Verdict BLOCK
 
 ### Your move
-Add the allow/deny tests (`/devanity improve G-001`), or accept the risk: `/devanity decide G-003 accept`.
+Add the allow/deny tests (`/devanity improve G-001`); then accept the residual risk: `/devanity decide G-003 accept`.
 
 ### Summary
 New `canDelete()` gate on the delete route: permission behavior altered (high-risk class) with no test. Reviewed 3/3 changed files.
@@ -61,12 +61,12 @@ Deep (high-risk domain) · check: `pnpm test --filter auth` → 12 passed, no si
 - [P2][trade][G-002][boundary-integrity][enforcement] Delete route imports the DB client directly — Key: src/routes/delete.ts:handler:boundary-integrity:layer-bypass
 
 ### Decisions
-- **[DECIDE][blocking][G-003][acceptance] Ship the delete route without permission tests?**
+- **[DECIDE][blocking][G-003][acceptance] Accept the delete gate's residual risk once tested?**
   - axis: auth × untested-gate
   - rule: a permission gate ships tested, or with a recorded acceptance.
   - derivation: none applies; no principle or accepted risk covers an untested permission gate.
   - context: high-risk class, guarded today only by human review · anchors G-001
-  - options: decline → no acceptance; add the tests, re-run review · accept → PASS_WITH_ACCEPTED_RISK, with who, what, why, expiry and any compensating control recorded.
+  - options: decline → no acceptance; add the tests, re-run review · accept → PASS_WITH_ACCEPTED_RISK once tested, with who, what, why, expiry and any compensating control recorded.
   - recommendation: decline, p=0.8; the fix is one file, cheaper than the recorded risk.
   - if undecided: the verdict stays BLOCK and re-fires on the next review of this diff.
 
