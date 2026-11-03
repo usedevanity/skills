@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
-import { validate, checkRelativeLinks, checkSkillTotal, KERNEL_TOKEN_CAP } from '../scripts/validate.mjs';
+import { validate, checkRelativeLinks, checkSkillTotal, checkDecisionExamples, KERNEL_TOKEN_CAP } from '../scripts/validate.mjs';
 
 const fm = (name, extra = '') => `---\nname: ${name}\ndescription: test skill\n${extra}---\n\n# ${name}\n`;
 
@@ -178,5 +178,21 @@ test('the repository copy passes; each way of pointing outside the installed plu
     // Every file that installs is read, whatever its extension.
     writeFileSync(join(dir, 'plugin/scripts/probe.js'), '// GUARDRAIL 12, see docs/hooks.md\n');
     assert.ok(checkRepository(dir).some((e) => e.includes('plugin/scripts/probe.js')), 'a .js file under plugin/ is read');
+  });
+});
+
+test('a worked example decision carries the template fields', () => {
+  const ok = '```md\n- **[DECIDE][blocking][G-001][rule] Q?**\n  - axis: a × b\n  - rule: r.\n  - derivation: none applies.\n'
+    + '  - context: c · anchors G-002\n  - options: a → x · b → y\n  - recommendation: a, p=0.7; why\n  - if undecided: stays.\n```\n';
+  assert.deepEqual(checkDecisionExamples(ok), []);
+  const bad = ok.replace('  - axis: a × b\n  - rule: r.\n', '  - decision: whether.\n').replace(', p=0.7', '');
+  failsWith(checkDecisionExamples(bad), 'lacks axis, rule, p=');
+  const provisional = ok.replace('[blocking]', '[provisional]').replace('  - if undecided: stays.\n', '');
+  failsWith(checkDecisionExamples(provisional), 'lacks acted');
+  assert.deepEqual(checkDecisionExamples('- [DECIDE][dormant][G-003][trade] T — worth doing when x — anchors K\n'), []);
+  // The validator runs it over every mode file, so a drifted example fails the whole skill.
+  withSkill('foo', fm('foo'), (dir, write) => {
+    write('modes/review.md', `# review\n\n${bad}`);
+    failsWith(validate(dir), 'modes/review.md example decision "Q?" (G-001) lacks axis, rule, p=');
   });
 });
